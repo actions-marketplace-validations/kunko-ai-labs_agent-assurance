@@ -1,0 +1,57 @@
+name: "Agent Assurance"
+description: "Transparent, framework-agnostic assurance checks for AI agents, mapped to OWASP Agentic security standards."
+author: "Kunko AI Labs"
+branding:
+  icon: "shield"
+  color: "red"
+
+inputs:
+  manifest:
+    description: "Path to the agent-assurance.yaml manifest"
+    required: false
+    default: "agent-assurance.yaml"
+  check:
+    description: "Check to run (e.g. blast-radius) or 'all'"
+    required: false
+    default: "all"
+  fail-on:
+    description: "Gate on 'fail' (default) or 'review'"
+    required: false
+    default: "fail"
+  sarif:
+    description: "Also emit a SARIF file at this path for GitHub code scanning"
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install agent-assurance
+      shell: bash
+      run: pip install "${{ github.action_path }}"
+
+    - name: Run Agent Assurance (markdown -> job summary)
+      shell: bash
+      run: |
+        agent-assurance check "${{ inputs.check }}" "${{ inputs.manifest }}" \
+          --format md --output aa-report.md --fail-on "${{ inputs.fail-on }}" || echo "AA_FAILED=1" >> "$GITHUB_ENV"
+        cat aa-report.md >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Emit SARIF (optional)
+      if: ${{ inputs.sarif != '' }}
+      shell: bash
+      run: |
+        agent-assurance check "${{ inputs.check }}" "${{ inputs.manifest }}" \
+          --format sarif --output "${{ inputs.sarif }}" || true
+
+    - name: Fail if assurance gate tripped
+      if: ${{ env.AA_FAILED == '1' }}
+      shell: bash
+      run: |
+        echo "Agent Assurance gate failed (fail-on=${{ inputs.fail-on }})." >&2
+        exit 1

@@ -1,0 +1,27 @@
+apiVersion: agent-assurance/v1
+
+agent:
+  name: readonly-support-bot
+  version: 1.0.0
+
+framework:
+  name: langgraph
+  version: "0.2"
+
+model:
+  provider: ollama
+  name: llama-3.1
+
+tools:
+  - name: crm.read
+    type: read
+    system: crm
+
+data:
+  - type: internal
+    systems: [crm]
+
+autonomy: 1
+
+delegation:
+  enabled: false

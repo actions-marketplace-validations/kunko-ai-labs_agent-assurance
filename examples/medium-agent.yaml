@@ -1,0 +1,33 @@
+apiVersion: agent-assurance/v1
+
+agent:
+  name: ops-assistant
+  version: 1.2.0
+
+framework:
+  name: openai-agents
+  version: "0.3"
+
+model:
+  provider: openai
+  name: gpt-4.1
+
+tools:
+  - name: crm.read
+    type: read
+    system: crm
+  - name: crm.write
+    type: write
+    system: crm
+  - name: ticket.create
+    type: write
+    system: zendesk
+
+data:
+  - type: pii
+    systems: [crm]
+
+autonomy: 2
+
+delegation:
+  enabled: false

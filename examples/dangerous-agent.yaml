@@ -1,0 +1,47 @@
+apiVersion: agent-assurance/v1
+
+agent:
+  name: autonomous-finance-agent
+  version: 0.9.0
+
+framework:
+  name: crewai
+  version: "0.8"
+
+model:
+  provider: openai
+  name: gpt-4.1
+
+tools:
+  - name: crm.write
+    type: write
+    system: crm
+  - name: aws.delete
+    type: delete
+    system: aws
+    production: true
+    irreversible: true
+  - name: email.send
+    type: external_send
+    system: email
+  - name: bank.transfer
+    type: financial
+    system: bank
+    irreversible: true
+
+data:
+  - type: pii
+    systems: [crm]
+  - type: financial
+    systems: [bank]
+  - type: credential
+    systems: [aws]
+
+autonomy: 4
+
+delegation:
+  enabled: true
+  subagents: [collector-agent, reconciler-agent]
+
+policies:
+  - policies/finance.yaml
