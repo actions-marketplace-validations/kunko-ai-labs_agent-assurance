@@ -38,9 +38,23 @@ runs:
     - name: Run Agent Assurance (markdown -> job summary)
       shell: bash
       run: |
+        set +e
         agent-assurance check "${{ inputs.check }}" "${{ inputs.manifest }}" \
-          --format md --output aa-report.md --fail-on "${{ inputs.fail-on }}" || echo "AA_FAILED=1" >> "$GITHUB_ENV"
-        cat aa-report.md >> "$GITHUB_STEP_SUMMARY"
+          --format md --output aa-report.md --fail-on "${{ inputs.fail-on }}"
+        code=$?
+        set -e
+
+        if [ -f aa-report.md ]; then
+          cat aa-report.md >> "$GITHUB_STEP_SUMMARY"
+        else
+          echo "agent-assurance produced no report (exit $code). Check the manifest path and schema." \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+        fi
+
+        # exit 2 = usage/manifest error, not a policy verdict: fail loudly and now.
+        if [ "$code" -eq 2 ]; then exit 2; fi
+        # exit 1 = the assurance gate tripped: recorded, enforced in the final step.
+        if [ "$code" -ne 0 ]; then echo "AA_FAILED=1" >> "$GITHUB_ENV"; fi
 
     - name: Emit SARIF (optional)
       if: ${{ inputs.sarif != '' }}

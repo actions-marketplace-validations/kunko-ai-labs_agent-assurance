@@ -1,0 +1,38 @@
+name: Agent Assurance (self-demo)
+
+# Dogfooding: runs this repo's own Action against the bundled example manifests.
+# The "passing" job gates like a real consumer would. The "failing" job is
+# intentionally allowed to fail so the job summary shows what a blocked PR
+# looks like, without turning the repo's CI red.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  medium-agent-passes:
+    name: Medium-risk agent (expected PASS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Agent Assurance
+        uses: ./
+        with:
+          manifest: examples/medium-agent.yaml
+          check: all
+          fail-on: fail
+
+  dangerous-agent-fails:
+    name: Dangerous agent (expected FAIL — demo)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Agent Assurance
+        uses: ./
+        with:
+          manifest: examples/dangerous-agent.yaml
+          check: all
+          fail-on: fail
