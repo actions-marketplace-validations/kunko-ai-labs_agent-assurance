@@ -66,10 +66,15 @@ class DiffReport:
 
     @property
     def promise_regressed(self) -> bool:
-        if self.promise_to is None:
+        """Kept (or stretched) -> broken, or new broken items on an already broken promise."""
+        if self.promise_to is not Status.FAIL:
             return False
-        before = _STATUS_ORDER.get(self.promise_from, 0) if self.promise_from else 0
-        return _STATUS_ORDER[self.promise_to] > before or bool(self.newly_broken)
+        return self.promise_from is not Status.FAIL or bool(self.newly_broken)
+
+    @property
+    def promise_stretched(self) -> bool:
+        """Kept -> review: undeclared reach or unknowns, nothing breaking."""
+        return self.promise_to is Status.REVIEW and self.promise_from is Status.PASS
 
     @property
     def has_delta(self) -> bool:
@@ -154,6 +159,8 @@ def to_markdown(d: DiffReport) -> str:
     lines = ["## \U0001f916 Agent Assurance — what this change does", ""]
     if d.promise_regressed:
         lines.append("❌ **PROMISE BROKEN BY THIS CHANGE**")
+    elif d.promise_stretched:
+        lines.append("⚠️ **PROMISE STRETCHED — undeclared reach, review**")
     elif d.band_up:
         lines.append("⚠️ **BLAST RADIUS GREW**")
     elif not d.has_delta:

@@ -18,9 +18,11 @@ Repository = "https://github.com/kunko-ai-labs/agent-assurance"
 
 [project.scripts]
 agent-assurance = "agent_assurance.cli:main"
+agent-assurance-mcp = "agent_assurance.mcp_server:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "ruff>=0.5"]
+mcp = ["mcp>=2.0"]
+dev = ["pytest>=8.0", "ruff>=0.5", "mcp>=2.0"]
 
 [build-system]
 requires = ["hatchling"]

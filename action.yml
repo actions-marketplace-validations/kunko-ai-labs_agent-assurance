@@ -55,7 +55,7 @@ runs:
       shell: bash
       run: pip install "${{ github.action_path }}"
 
-    - name: Check out the base tree (mode: diff)
+    - name: "Check out the base tree (mode: diff)"
       if: ${{ inputs.mode == 'diff' }}
       shell: bash
       # The PR base goes into a detached worktree; nothing in it is executed.
@@ -105,7 +105,7 @@ runs:
         # exit 1 = the assurance gate tripped: recorded, enforced in the final step.
         if [ "$code" -ne 0 ]; then echo "AA_FAILED=1" >> "$GITHUB_ENV"; fi
 
-    - name: Comment on the pull request (mode: diff)
+    - name: "Comment on the pull request (mode: diff)"
       if: ${{ inputs.mode == 'diff' && inputs.comment == 'true' && github.event_name == 'pull_request' }}
       shell: bash
       env:
