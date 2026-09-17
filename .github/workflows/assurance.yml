@@ -1,9 +1,9 @@
-name: Agent Assurance (self-demo)
-
 # Dogfooding: runs this repo's own Action against the bundled example manifests.
-# The "passing" job gates like a real consumer would. The "failing" job is
-# intentionally allowed to fail so the job summary shows what a blocked PR
-# looks like, without turning the repo's CI red.
+#
+# Every job here is an assertion, not a demo. If the gate stops blocking, CI
+# goes red — a green run means "the Action still passes what it should and
+# still blocks what it should".
+name: Agent Assurance (self-demo)
 
 on:
   push:
@@ -13,7 +13,7 @@ on:
 
 jobs:
   medium-agent-passes:
-    name: Medium-risk agent (expected PASS)
+    name: Medium-risk agent (must PASS)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,15 +24,64 @@ jobs:
           check: all
           fail-on: fail
 
-  dangerous-agent-fails:
-    name: Dangerous agent (expected FAIL — demo)
+  high-agent-reviews:
+    name: High-risk agent (must PASS with fail-on=fail, BLOCK with fail-on=review)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      - name: Run Agent Assurance
+      - name: fail-on=fail lets REVIEW through
+        uses: ./
+        with:
+          manifest: examples/high-agent.yaml
+          check: all
+          fail-on: fail
+      - name: fail-on=review must block
+        id: strict
+        continue-on-error: true
+        uses: ./
+        with:
+          manifest: examples/high-agent.yaml
+          check: all
+          fail-on: review
+      - name: Assert the strict gate tripped
+        if: steps.strict.outcome != 'failure'
+        run: |
+          echo "::error::fail-on=review did not block a HIGH-risk agent (outcome=${{ steps.strict.outcome }})"
+          exit 1
+
+  dangerous-agent-blocks:
+    name: Dangerous agent (must BLOCK)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Agent Assurance (expected to fail)
+        id: gate
+        continue-on-error: true
         uses: ./
         with:
           manifest: examples/dangerous-agent.yaml
           check: all
           fail-on: fail
+          sarif: aa.sarif
+      - name: Assert the gate tripped
+        if: steps.gate.outcome != 'failure'
+        run: |
+          echo "::error::The assurance gate did NOT block a CRITICAL agent (outcome=${{ steps.gate.outcome }})"
+          exit 1
+      - name: Assert SARIF was produced and points at the manifest
+        run: |
+          test -s aa.sarif
+          python3 - <<'PY'
+          import json
+          s = json.load(open("aa.sarif"))
+          r = s["runs"][0]["results"][0]
+          uri = r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
+          assert uri == "examples/dangerous-agent.yaml", uri
+          assert r["kind"] == "fail" and r["level"] == "error", r
+          print("SARIF ok:", uri, r["level"])
+          PY
+      - name: Upload SARIF artifact (inspectable from the run page)
+        uses: actions/upload-artifact@v4
+        with:
+          name: aa-sarif
+          path: aa.sarif

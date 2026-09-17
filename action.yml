@@ -19,9 +19,13 @@ inputs:
     required: false
     default: "fail"
   sarif:
-    description: "Also emit a SARIF file at this path for GitHub code scanning"
+    description: "Also emit a SARIF file at this path (e.g. aa.sarif)"
     required: false
     default: ""
+  upload-sarif:
+    description: "Upload the SARIF to GitHub code scanning (needs permissions: security-events: write)"
+    required: false
+    default: "false"
 
 runs:
   using: "composite"
@@ -59,9 +63,17 @@ runs:
     - name: Emit SARIF (optional)
       if: ${{ inputs.sarif != '' }}
       shell: bash
+      # The verdict was already recorded above; here only exit 2 (no report) matters.
       run: |
         agent-assurance check "${{ inputs.check }}" "${{ inputs.manifest }}" \
-          --format sarif --output "${{ inputs.sarif }}" || true
+          --format sarif --output "${{ inputs.sarif }}" || [ $? -ne 2 ]
+
+    - name: Upload SARIF to code scanning (optional)
+      if: ${{ inputs.sarif != '' && inputs.upload-sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.sarif }}
+        category: agent-assurance
 
     - name: Fail if assurance gate tripped
       if: ${{ env.AA_FAILED == '1' }}

@@ -1,0 +1,39 @@
+apiVersion: agent-assurance/v1
+
+# HIGH band (score 16-27): enough reach to warrant a human look (REVIEW),
+# but not the irreversible/financial profile that FAILs outright.
+agent:
+  name: support-copilot
+  version: 2.0.0
+
+framework:
+  name: langgraph
+  version: "0.4"
+
+model:
+  provider: anthropic
+  name: claude-sonnet-5
+
+tools:
+  - name: crm.read
+    type: read
+    system: crm
+  - name: crm.write
+    type: write
+    system: crm
+  - name: email.send
+    type: external_send
+    system: email
+  - name: refund.issue
+    type: write
+    system: billing
+    production: true
+
+data:
+  - type: pii
+    systems: [crm]
+
+autonomy: 3
+
+delegation:
+  enabled: false

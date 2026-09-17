@@ -29,8 +29,21 @@ jobs:
       - name: Test (pytest)
         run: pytest -q
 
-      - name: Smoke-test the CLI
+      - name: Exit-code contract with the installed binary
+        # 0 = pass, 1 = gate tripped, 2 = usage error. The Action depends on this.
         run: |
           agent-assurance --version
           agent-assurance validate examples/safe-agent.yaml
           agent-assurance check blast-radius examples/safe-agent.yaml
+          set +e
+          agent-assurance check all examples/dangerous-agent.yaml > /dev/null; c1=$?
+          agent-assurance check all examples/high-agent.yaml --fail-on review > /dev/null; c2=$?
+          agent-assurance check all examples/does-not-exist.yaml > /dev/null 2>&1; c3=$?
+          set -e
+          echo "dangerous=$c1 high/review=$c2 missing=$c3"
+          test "$c1" -eq 1 && test "$c2" -eq 1 && test "$c3" -eq 2
+
+      - name: SARIF from the installed binary is valid JSON with a real location
+        run: |
+          agent-assurance check all examples/dangerous-agent.yaml --format sarif -o aa.sarif || true
+          python3 -c "import json; s=json.load(open('aa.sarif')); r=s['runs'][0]['results'][0]; assert r['locations'][0]['physicalLocation']['artifactLocation']['uri']=='examples/dangerous-agent.yaml'; print('ok')"

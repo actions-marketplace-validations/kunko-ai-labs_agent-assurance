@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 
+from .. import __version__
 from ..checks.base import Status
 from ..engine import AssuranceReport
 
@@ -16,11 +17,18 @@ from ..engine import AssuranceReport
 _LEVEL = {Status.FAIL: "error", Status.REVIEW: "warning", Status.PASS: "note"}
 _TOOL_URI = "https://github.com/kunko-ai-labs/agent-assurance"
 
+# Code scanning needs a location it can resolve inside the repo. The manifest is
+# the artifact under review, so findings anchor there. Line 1 is deliberate: the
+# finding is a property of the manifest as a whole, not of a single line.
+_DEFAULT_MANIFEST = "agent-assurance.yaml"
+_ANCHOR_LINE = 1
 
-def to_dict(report: AssuranceReport, manifest_path: str = "agent-assurance.yaml") -> dict:
+
+def to_dict(report: AssuranceReport, manifest_path: str = _DEFAULT_MANIFEST) -> dict:
     rules = []
     results = []
     seen_rules: set[str] = set()
+    agent = report.manifest.agent.name
 
     for r in report.results:
         if r.check_id not in seen_rules:
@@ -39,21 +47,36 @@ def to_dict(report: AssuranceReport, manifest_path: str = "agent-assurance.yaml"
                         else r.title
                     },
                     "helpUri": _TOOL_URI,
-                    "properties": {"tags": ["agent-assurance", "ai-security"]},
+                    # A rule's default severity is a property of the rule, not
+                    # of one run's outcome; the per-result level carries that.
+                    "defaultConfiguration": {"level": "error"},
+                    "properties": {
+                        "tags": ["agent-assurance", "ai-security"],
+                        "standards": standards,
+                    },
                 }
             )
         results.append(
             {
                 "ruleId": r.check_id,
+                # kind=pass keeps a clean check out of the Security tab: GitHub
+                # only raises alerts for kind=fail (the default).
+                "kind": "pass" if r.status is Status.PASS else "fail",
                 "level": _LEVEL[r.status],
                 "message": {"text": f"{r.summary}\n" + "\n".join(r.details)},
                 "locations": [
                     {
                         "physicalLocation": {
                             "artifactLocation": {"uri": manifest_path},
+                            "region": {"startLine": _ANCHOR_LINE},
                         }
                     }
                 ],
+                # Stable across runs so code scanning tracks one finding over
+                # time instead of opening a new alert on every push.
+                "partialFingerprints": {
+                    "agentAssurance/v1": f"{r.check_id}:{agent}:{manifest_path}"
+                },
             }
         )
 
@@ -65,15 +88,18 @@ def to_dict(report: AssuranceReport, manifest_path: str = "agent-assurance.yaml"
                 "tool": {
                     "driver": {
                         "name": "agent-assurance",
+                        "version": __version__,
+                        "semanticVersion": __version__,
                         "informationUri": _TOOL_URI,
                         "rules": rules,
                     }
                 },
+                "automationDetails": {"id": f"agent-assurance/{agent}/"},
                 "results": results,
             }
         ],
     }
 
 
-def to_sarif(report: AssuranceReport, manifest_path: str = "agent-assurance.yaml") -> str:
+def to_sarif(report: AssuranceReport, manifest_path: str = _DEFAULT_MANIFEST) -> str:
     return json.dumps(to_dict(report, manifest_path), indent=2, ensure_ascii=False)
