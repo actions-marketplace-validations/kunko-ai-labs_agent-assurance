@@ -63,6 +63,8 @@ class BlastRadiusCheck(Check):
                 "Unknown capabilities (scored as write): "
                 + ", ".join(p.unknown_capabilities)
             )
+        if p.auto_approved:
+            details.append("Runs without human approval: " + ", ".join(p.auto_approved))
         details.append(f"Autonomy: L{manifest.autonomy}")
         details.append(f"Risk score: {p.score} ({p.band})")
 
@@ -86,6 +88,7 @@ class BlastRadiusCheck(Check):
                 "external_side_effects": p.external_side_effects,
                 "irreversible_actions": p.irreversible_actions,
                 "unknown_capabilities": p.unknown_capabilities,
+                "auto_approved": p.auto_approved,
                 "factors": [
                     {"points": f.points, "reason": f.reason} for f in p.factors
                 ],

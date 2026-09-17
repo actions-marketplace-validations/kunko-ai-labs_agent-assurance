@@ -86,6 +86,13 @@
           "source": {
             "type": "string",
             "description": "Provenance for observed tools: path:line of the config that grants it. Empty when declared by hand."
+          },
+          "approval": {
+            "enum": [
+              "auto",
+              "ask"
+            ],
+            "description": "Observed human-in-the-loop status from the host's permission rules. Not set on declared tools; autonomy is the declared equivalent."
           }
         }
       }

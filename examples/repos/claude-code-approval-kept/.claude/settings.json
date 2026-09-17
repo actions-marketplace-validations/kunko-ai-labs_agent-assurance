@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep"
+    ],
+    "ask": [
+      "Edit",
+      "Write",
+      "Bash(npm test)"
+    ],
+    "deny": [
+      "WebFetch",
+      "Bash(rm -rf *)"
+    ]
+  }
+}

@@ -32,7 +32,7 @@ Vulnerability scanners look for poisoned tools and leaked secrets. Permission-di
 | | What it is | Where it comes from |
 |---|---|---|
 | **Declared** | The promise: which capability classes, systems, data and autonomy the agent is *meant* to have | `agent-assurance.yaml`, written by the team |
-| **Observed** | What the configuration *actually grants* | `scan`: `.mcp.json` (project MCP servers) via a [curated catalogue](src/agent_assurance/scan/catalog.py); unknown servers are `UNKNOWN`, never guessed |
+| **Observed** | What the configuration *actually grants* — and whether a human is still in the loop | `scan`: `.mcp.json` (project MCP servers, via a [curated catalogue](src/agent_assurance/scan/catalog.py)) and Claude Code `.claude/settings.json` permissions. Unknown servers and tools are `UNKNOWN`, never guessed |
 
 Checks:
 
@@ -42,6 +42,27 @@ Checks:
 | **AA-002 Declared vs Observed** | Does the configuration stay within the promise? | Undeclared write/delete/execute/external_send/financial or sensitive data → **fail** · extra reach or `UNKNOWN` → review · within → pass |
 
 `scan` without a manifest still works: you get the observed blast radius and a "Sources scanned" table. `check` on a manifest alone runs AA-001 only.
+
+### What the scanner understands
+
+**`.mcp.json`** — each server becomes a system. Its access classes come from the catalogue entry for its package or name (e.g. `@modelcontextprotocol/server-github` → read, write). A remote `url` is network egress (`external_send`); an `env`/`headers` name that looks like a credential is credential access (the value is never read). A server not in the catalogue is `UNKNOWN`.
+
+**`.claude/settings.json`** (and `settings.local.json`) — Claude Code's built-in tools exist whether or not they are listed; a permission rule decides whether a **human approves** the call. So `allow` = runs without approval, `ask` = a person confirms, `deny` = removed. Precedence: deny > ask > allow.
+
+| Rule | Class | System | Blast-radius points |
+|---|---|---|---|
+| `Read`, `Glob`, `Grep`, `LS` | read | filesystem | 1 |
+| `Edit`, `Write`, `MultiEdit`, `NotebookEdit` | write | filesystem | 3 (+2 if `allow`) |
+| `Bash(...)` | execute | shell | 3 (+2 if `allow`) |
+| `WebFetch`, `WebSearch` | read | web | 1 |
+| `Agent`, `Task` | execute | subagents | 3 (+2 if `allow`) |
+| `mcp__<server>__<tool>`, `mcp__<server>` | the server's widest class from the catalogue | server | as the class (+2 if `allow`) |
+| `defaultMode: acceptEdits` / `bypassPermissions` | write / execute, auto-approved | — | 3+2 |
+| anything else | unknown | — | 3 |
+
+AA-002 treats autonomy as part of the promise: a manifest with `autonomy: 2` (a human approves actions) is **broken** by an `allow` rule on a write/execute/external tool. Declare `autonomy: 3` if that is intended.
+
+Every scan ends with a **Sources scanned** table: files parsed, files detected but not supported yet (`.cursor/mcp.json`, `.vscode/mcp.json`, `.gemini/settings.json`, `.codex/config.toml`), and what was deduced from each. A repo with nothing scannable and nothing declared exits 2 — never an empty PASS.
 
 ## The manifest is the promise
 
@@ -107,6 +128,8 @@ Not an "AI risk score". Every point is attributable:
 | irreversible action | +5 |
 | delegation enabled | +3 |
 | autonomy above L2 | +2 per level |
+| tool of unknown class (`UNKNOWN`) | 3 (scored as write, never as safe) |
+| non-read tool auto-approved by the host (no human in the loop) | +2 |
 
 Bands: LOW `<8` · MEDIUM `<16` · HIGH `<28` · CRITICAL `>=28`. HIGH → review, CRITICAL → fail (configurable with `--fail-on`).
 
@@ -120,7 +143,7 @@ agent-assurance scan .                                  # observe + verify (pick
 agent-assurance scan path/to/repo -m promise.yaml --format sarif -o aa.sarif
 ```
 
-Try the bundled repos: `examples/repos/mcp-promise-kept` (PASS), `mcp-promise-broken` (FAIL), `mcp-unknown-server` (REVIEW).
+Try the bundled repos under `examples/repos/`: `mcp-promise-kept` (PASS), `mcp-promise-broken` (FAIL), `mcp-unknown-server` (REVIEW), `claude-code-approval-kept` (PASS), `claude-code-approval-broken` (FAIL: `allow: Bash(*)` with a declared L2).
 
 `--format sarif` surfaces findings in the GitHub Security tab (a PASS is emitted as `kind: pass`, so a clean agent never creates an alert).
 
@@ -156,7 +179,7 @@ Checks map primarily to the **OWASP Top 10 for Agentic Applications** (business 
 
 | Version | What | Why |
 |---|---|---|
-| **v0.2 — `scan` + AA-002** | Observe `.mcp.json` (done), then Claude Code `permissions` in `.claude/settings.json`; verify against the declaration. Unknown sources are `UNKNOWN`, never guessed. | The manifest becomes an attestation, not a questionnaire. |
+| **v0.2 — `scan` + AA-002** (done) | Observe `.mcp.json` and Claude Code `permissions`; verify against the declaration, including whether a human is still in the loop. Unknown sources are `UNKNOWN`, never guessed. | The manifest becomes an attestation, not a questionnaire. |
 | **v0.3 — `diff`** | Compare base vs PR: *"new MCP server `github` (write); blast radius MEDIUM → HIGH; promise broken: the manifest declares read-only"*. Gate on the delta. | The moment a PR widens what an agent can do — or breaks what it promised — the reviewer sees it. |
 | later | More observed sources (Cursor, VS Code, Gemini CLI, framework tool definitions); more questions on the same input (delegation budget, external-send allowlist). | Same input, more questions. |
 

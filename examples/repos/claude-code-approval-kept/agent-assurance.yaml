@@ -1,0 +1,23 @@
+apiVersion: agent-assurance/v1
+
+# The promise: a coding assistant that can read and edit files and run the
+# test suite, with a human approving anything that executes or writes.
+agent:
+  name: repo-assistant
+  version: 1.0.0
+
+framework:
+  name: claude-code
+
+tools:
+  - name: filesystem.read
+    type: read
+    system: filesystem
+  - name: filesystem.edit
+    type: write
+    system: filesystem
+  - name: shell.test
+    type: execute
+    system: shell
+
+autonomy: 2

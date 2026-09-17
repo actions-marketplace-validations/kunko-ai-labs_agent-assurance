@@ -49,6 +49,10 @@ class Tool(BaseModel):
     # Provenance for observed tools: "path:line" of the config that grants it.
     # Empty for declared (hand-written) tools.
     source: str | None = None
+    # Human-in-the-loop status observed in the host's permission rules:
+    # "auto" (no approval needed), "ask" (approval required) or None (unknown /
+    # not applicable). Autonomy is declared; this is what the config does.
+    approval: str | None = None
 
 
 class DataSource(BaseModel):

@@ -85,6 +85,8 @@ class DeclaredVsObservedCheck(Check):
                 locations.append(loc)
 
         broken_systems: set[str] = set()
+
+        # 1. Undeclared capability classes.
         for t in observed.tools:
             if t.type is ToolAccess.UNKNOWN:
                 note(unknown, f"`{t.name}` could not be classified", t.source)
@@ -94,9 +96,36 @@ class DeclaredVsObservedCheck(Check):
                 note(bucket, f"`{t.name}` grants **{t.type.value}**, not declared", t.source)
                 if bucket is broken and t.system:
                     broken_systems.add(t.system)
+
+        # 2. Autonomy is a promise too: L0-L2 means a human approves actions.
+        #    A host rule that auto-approves a non-read tool removes that human.
+        if declared.autonomy <= 2:
+            for t in observed.tools:
+                if t.approval == "auto" and t.type in _BREAKING_ACCESS:
+                    note(
+                        broken,
+                        f"`{t.name}` runs **without human approval**, but declared autonomy is L{declared.autonomy}",
+                        t.source,
+                    )
+                    if t.system:
+                        broken_systems.add(t.system)
+
+        # 3. Undeclared data classes: sensitive ones break the promise; the
+        #    rest are extra reach, reported only for systems not already broken.
+        undeclared_data = [d for d in observed.data if d.type not in declared_data]
+        for d in undeclared_data:
+            if d.type in _BREAKING_DATA:
+                systems = ", ".join(d.systems) or "unspecified"
+                note(broken, f"access to **{d.type.value}** data ({systems}), not declared", d.source)
+                broken_systems.update(d.systems)
+        for d in undeclared_data:
+            if d.type not in _BREAKING_DATA and not set(d.systems) <= broken_systems:
+                systems = ", ".join(d.systems) or "unspecified"
+                note(review, f"access to **{d.type.value}** data ({systems}), not declared", d.source)
+
+        # 4. Extra reach: declared class, undeclared system. Only worth a line
+        #    when that system is not already reported as breaking the promise.
         for t in observed.tools:
-            # Extra reach is only worth a line when the system is not already
-            # reported as breaking the promise.
             if (
                 t.type is not ToolAccess.UNKNOWN
                 and t.type in declared_access
@@ -105,12 +134,6 @@ class DeclaredVsObservedCheck(Check):
                 and t.system not in broken_systems
             ):
                 note(review, f"`{t.name}` reaches system `{t.system}`, not declared", t.source)
-
-        for d in observed.data:
-            if d.type not in declared_data:
-                bucket = broken if d.type in _BREAKING_DATA else review
-                systems = ", ".join(d.systems) or "unspecified"
-                note(bucket, f"access to **{d.type.value}** data ({systems}), not declared", d.source)
 
         if broken:
             status = Status.FAIL

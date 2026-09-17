@@ -51,7 +51,7 @@ def test_unknown_server_is_unknown_not_guessed():
 def test_unsupported_files_are_listed_not_silent():
     result = scan_directory(UNKNOWN)
     unsupported = [s for s in result.sources if not s.supported]
-    assert [s.path for s in unsupported] == [".claude/settings.json"]
+    assert [s.path for s in unsupported] == [".cursor/mcp.json"]
 
 
 def test_declared_metadata_survives_merge():
@@ -171,3 +171,88 @@ def test_plain_check_still_runs_only_blast_radius():
     report = engine.run(m)
     assert [r.check_id for r in report.results] == ["AA-001"]
     assert report.verdict is Status.PASS
+
+
+# --- Claude Code permissions -------------------------------------------------
+
+CC_KEPT = str(REPOS / "claude-code-approval-kept")
+CC_BROKEN = str(REPOS / "claude-code-approval-broken")
+
+
+def test_claude_settings_rules_become_tools_with_approval():
+    result = scan_directory(CC_KEPT)
+    by_name = {t.name: t for t in result.observed.tools}
+    assert by_name["claude-code.Read"].type is ToolAccess.READ
+    assert by_name["claude-code.Read"].approval == "auto"
+    assert by_name["claude-code.Bash(npm test)"].type is ToolAccess.EXECUTE
+    assert by_name["claude-code.Bash(npm test)"].approval == "ask"
+    assert by_name["claude-code.Edit"].source == ".claude/settings.json:9"
+    # deny removes the capability entirely
+    assert "claude-code.WebFetch" not in by_name
+
+
+def test_claude_settings_deny_overrides_allow(tmp_path):
+    d = tmp_path / ".claude"
+    d.mkdir()
+    (d / "settings.json").write_text(
+        '{"permissions": {"allow": ["Bash(*)", "Read"], "deny": ["Bash"]}}', encoding="utf-8"
+    )
+    result = scan_directory(str(tmp_path))
+    assert [t.name for t in result.observed.tools] == ["claude-code.Read"]
+    assert "overridden by deny" in result.sources[0].note
+
+
+def test_claude_settings_bypass_permissions_is_auto_execute(tmp_path):
+    d = tmp_path / ".claude"
+    d.mkdir()
+    (d / "settings.json").write_text(
+        '{"permissions": {"defaultMode": "bypassPermissions"}}', encoding="utf-8"
+    )
+    result = scan_directory(str(tmp_path))
+    t = result.observed.tools[0]
+    assert t.type is ToolAccess.EXECUTE and t.approval == "auto"
+
+
+def test_claude_settings_mcp_rule_uses_catalogue_or_unknown(tmp_path):
+    d = tmp_path / ".claude"
+    d.mkdir()
+    (d / "settings.json").write_text(
+        '{"permissions": {"allow": ["mcp__github__create_issue", "mcp__acme"]}}', encoding="utf-8"
+    )
+    result = scan_directory(str(tmp_path))
+    by_name = {t.name: t for t in result.observed.tools}
+    assert by_name["claude-code.mcp__github__create_issue"].type is ToolAccess.WRITE
+    assert by_name["claude-code.mcp__acme"].type is ToolAccess.UNKNOWN
+    assert result.unknowns == ["mcp__acme"]
+
+
+def test_approval_promise_kept(tmp_path):
+    code, r = _scan_json(CC_KEPT, tmp_path)
+    assert code == cli.EXIT_OK and r["verdict"] == "PASS"
+    aa2 = next(c for c in r["checks"] if c["id"] == "AA-002")
+    assert aa2["status"] == "PASS"
+
+
+def test_auto_approval_breaks_an_l2_promise(tmp_path):
+    """Declared autonomy L2 = a human approves. `allow: Bash(*)` removes them."""
+    code, r = _scan_json(CC_BROKEN, tmp_path)
+    assert code == cli.EXIT_GATE and r["verdict"] == "FAIL"
+    aa2 = next(c for c in r["checks"] if c["id"] == "AA-002")
+    assert any("Bash(*)" in m and "without human approval" in m for m in aa2["data"]["broken"])
+    aa1 = next(c for c in r["checks"] if c["id"] == "AA-001")
+    assert "claude-code.Bash(*)" in aa1["data"]["auto_approved"]
+    # No redundant REVIEW lines for systems already reported as broken.
+    assert aa2["data"]["review"] == []
+
+
+def test_auto_approval_is_fine_when_autonomy_is_declared(tmp_path):
+    """The same config with a declared L3 keeps the promise on approval."""
+    import shutil
+
+    shutil.copytree(CC_BROKEN, tmp_path / "repo")
+    manifest = tmp_path / "repo" / "agent-assurance.yaml"
+    text = manifest.read_text(encoding="utf-8").replace("autonomy: 2", "autonomy: 3")
+    manifest.write_text(text, encoding="utf-8")
+    _, r = _scan_json(str(tmp_path / "repo"), tmp_path)
+    aa2 = next(c for c in r["checks"] if c["id"] == "AA-002")
+    assert not any("without human approval" in m for m in aa2["data"]["broken"])

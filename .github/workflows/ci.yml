@@ -42,10 +42,13 @@ jobs:
           agent-assurance scan examples/repos/mcp-promise-kept > /dev/null; c4=$?
           agent-assurance scan examples/repos/mcp-promise-broken > /dev/null; c5=$?
           agent-assurance scan examples/repos/mcp-unknown-server --fail-on review > /dev/null; c6=$?
+          agent-assurance scan examples/repos/claude-code-approval-kept --fail-on review > /dev/null; c7=$?
+          agent-assurance scan examples/repos/claude-code-approval-broken > /dev/null; c8=$?
           set -e
-          echo "dangerous=$c1 high/review=$c2 missing=$c3 kept=$c4 broken=$c5 unknown/review=$c6"
+          echo "dangerous=$c1 high/review=$c2 missing=$c3 kept=$c4 broken=$c5 unknown/review=$c6 cc-kept=$c7 cc-broken=$c8"
           test "$c1" -eq 1 && test "$c2" -eq 1 && test "$c3" -eq 2
           test "$c4" -eq 0 && test "$c5" -eq 1 && test "$c6" -eq 1
+          test "$c7" -eq 0 && test "$c8" -eq 1
 
       - name: SARIF from the installed binary is valid JSON with a real location
         run: |

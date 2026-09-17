@@ -13,15 +13,14 @@ from dataclasses import dataclass, field
 
 from ..manifest import AgentInfo, DataSource, FrameworkSpec, Manifest, Tool
 from .base import Observation, Scanner, Source
+from .claude_settings import ClaudeSettingsScanner
 from .mcp_json import McpJsonScanner
 
-SCANNERS: list[Scanner] = [McpJsonScanner()]
+SCANNERS: list[Scanner] = [McpJsonScanner(), ClaudeSettingsScanner()]
 
 # Recognised but not parsed yet. Listed so the report can say "detected, not
 # supported" instead of staying silent. Each becomes a scanner in its own issue.
 KNOWN_UNSUPPORTED: dict[str, str] = {
-    ".claude/settings.json": "claude-code-settings (issue #10)",
-    ".claude/settings.local.json": "claude-code-settings (issue #10)",
     ".cursor/mcp.json": "cursor-mcp",
     ".vscode/mcp.json": "vscode-mcp",
     ".gemini/settings.json": "gemini-cli-settings",

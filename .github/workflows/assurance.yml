@@ -128,3 +128,33 @@ jobs:
           assert r["kind"] == "fail" and locs == [(".mcp.json", 11), (".mcp.json", 16)], locs
           print("SARIF ok:", locs)
           PY
+
+  scan-claude-code-approval-kept:
+    name: scan — Claude Code permissions within declared autonomy (must PASS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          mode: scan
+          directory: examples/repos/claude-code-approval-kept
+          manifest: examples/repos/claude-code-approval-kept/agent-assurance.yaml
+          fail-on: review
+
+  scan-claude-code-approval-broken:
+    name: scan — allow Bash(*) with declared L2 (must BLOCK)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: gate
+        continue-on-error: true
+        uses: ./
+        with:
+          mode: scan
+          directory: examples/repos/claude-code-approval-broken
+          manifest: examples/repos/claude-code-approval-broken/agent-assurance.yaml
+      - name: Assert the gate tripped
+        if: steps.gate.outcome != 'failure'
+        run: |
+          echo "::error::scan did NOT block an auto-approved shell under a declared L2 (outcome=${{ steps.gate.outcome }})"
+          exit 1

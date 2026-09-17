@@ -36,6 +36,10 @@ DATA_WEIGHTS: dict[DataClass, int] = {
 
 PRODUCTION_WEIGHT = 5
 IRREVERSIBLE_WEIGHT = 5
+# A non-read tool the host will run without asking a human (e.g. Claude Code
+# `permissions.allow`). The capability was already scored; this is the cost of
+# removing the person from the loop for it.
+AUTO_APPROVAL_WEIGHT = 2
 DELEGATION_WEIGHT = 3
 # Autonomy adds risk above "act with approval" (L2).
 AUTONOMY_WEIGHT_PER_LEVEL = 2
@@ -67,6 +71,7 @@ class RiskProfile:
     external_side_effects: list[str] = field(default_factory=list)
     irreversible_actions: list[str] = field(default_factory=list)
     unknown_capabilities: list[str] = field(default_factory=list)
+    auto_approved: list[str] = field(default_factory=list)
 
     @property
     def band(self) -> str:
@@ -102,6 +107,9 @@ def assess(manifest: Manifest) -> RiskProfile:
         if tool.irreversible:
             p.add(IRREVERSIBLE_WEIGHT, f"tool '{tool.name}' is irreversible")
             p.irreversible_actions.append(tool.name)
+        if tool.approval == "auto" and tool.type is not ToolAccess.READ:
+            p.add(AUTO_APPROVAL_WEIGHT, f"tool '{tool.name}' runs without human approval")
+            p.auto_approved.append(tool.name)
 
     for source in manifest.data:
         weight = DATA_WEIGHTS.get(source.type, 1)
