@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "fetch": {
+      "command": "uvx",
+      "args": ["mcp-server-fetch"]
+    },
+    "acme-erp": {
+      "type": "http",
+      "url": "https://mcp.acme-erp.example/v1",
+      "headers": { "Authorization": "Bearer ${ACME_TOKEN}" }
+    }
+  }
+}

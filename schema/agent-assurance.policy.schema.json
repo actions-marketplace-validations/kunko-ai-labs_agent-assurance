@@ -1,0 +1,322 @@
+{
+  "$defs": {
+    "Bands": {
+      "description": "Lower bound of each band; LOW starts at 0.",
+      "properties": {
+        "medium": {
+          "default": 8,
+          "title": "Medium",
+          "type": "integer"
+        },
+        "high": {
+          "default": 16,
+          "title": "High",
+          "type": "integer"
+        },
+        "critical": {
+          "default": 28,
+          "title": "Critical",
+          "type": "integer"
+        }
+      },
+      "title": "Bands",
+      "type": "object"
+    },
+    "DataClass": {
+      "enum": [
+        "public",
+        "internal",
+        "pii",
+        "financial",
+        "credential",
+        "health"
+      ],
+      "title": "DataClass",
+      "type": "string"
+    },
+    "DataWeights": {
+      "properties": {
+        "public": {
+          "default": 0,
+          "title": "Public",
+          "type": "integer"
+        },
+        "internal": {
+          "default": 1,
+          "title": "Internal",
+          "type": "integer"
+        },
+        "pii": {
+          "default": 3,
+          "title": "Pii",
+          "type": "integer"
+        },
+        "health": {
+          "default": 4,
+          "title": "Health",
+          "type": "integer"
+        },
+        "financial": {
+          "default": 4,
+          "title": "Financial",
+          "type": "integer"
+        },
+        "credential": {
+          "default": 5,
+          "title": "Credential",
+          "type": "integer"
+        }
+      },
+      "title": "DataWeights",
+      "type": "object"
+    },
+    "Gate": {
+      "properties": {
+        "review_bands": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Review Bands",
+          "type": "array"
+        },
+        "fail_bands": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fail Bands",
+          "type": "array"
+        }
+      },
+      "title": "Gate",
+      "type": "object"
+    },
+    "PolicyCapability": {
+      "properties": {
+        "suffix": {
+          "title": "Suffix",
+          "type": "string"
+        },
+        "access": {
+          "$ref": "#/$defs/ToolAccess"
+        },
+        "irreversible": {
+          "default": false,
+          "title": "Irreversible",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "suffix",
+        "access"
+      ],
+      "title": "PolicyCapability",
+      "type": "object"
+    },
+    "PolicyCatalogEntry": {
+      "properties": {
+        "system": {
+          "title": "System",
+          "type": "string"
+        },
+        "capabilities": {
+          "items": {
+            "$ref": "#/$defs/PolicyCapability"
+          },
+          "title": "Capabilities",
+          "type": "array"
+        },
+        "data": {
+          "items": {
+            "$ref": "#/$defs/DataClass"
+          },
+          "title": "Data",
+          "type": "array"
+        },
+        "packages": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Packages",
+          "type": "array"
+        },
+        "aliases": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Aliases",
+          "type": "array"
+        },
+        "source": {
+          "default": "organisation policy",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "system",
+        "capabilities"
+      ],
+      "title": "PolicyCatalogEntry",
+      "type": "object"
+    },
+    "Promise": {
+      "properties": {
+        "breaking_access": {
+          "items": {
+            "$ref": "#/$defs/ToolAccess"
+          },
+          "title": "Breaking Access",
+          "type": "array"
+        },
+        "breaking_data": {
+          "items": {
+            "$ref": "#/$defs/DataClass"
+          },
+          "title": "Breaking Data",
+          "type": "array"
+        },
+        "max_autonomy_with_human": {
+          "default": 2,
+          "title": "Max Autonomy With Human",
+          "type": "integer"
+        }
+      },
+      "title": "Promise",
+      "type": "object"
+    },
+    "ToolAccess": {
+      "enum": [
+        "read",
+        "write",
+        "delete",
+        "execute",
+        "external_send",
+        "financial",
+        "unknown"
+      ],
+      "title": "ToolAccess",
+      "type": "string"
+    },
+    "ToolWeights": {
+      "properties": {
+        "read": {
+          "default": 1,
+          "title": "Read",
+          "type": "integer"
+        },
+        "execute": {
+          "default": 3,
+          "title": "Execute",
+          "type": "integer"
+        },
+        "write": {
+          "default": 3,
+          "title": "Write",
+          "type": "integer"
+        },
+        "external_send": {
+          "default": 3,
+          "title": "External Send",
+          "type": "integer"
+        },
+        "delete": {
+          "default": 5,
+          "title": "Delete",
+          "type": "integer"
+        },
+        "financial": {
+          "default": 5,
+          "title": "Financial",
+          "type": "integer"
+        },
+        "unknown": {
+          "default": 3,
+          "title": "Unknown",
+          "type": "integer"
+        }
+      },
+      "title": "ToolWeights",
+      "type": "object"
+    },
+    "Weights": {
+      "properties": {
+        "tools": {
+          "$ref": "#/$defs/ToolWeights"
+        },
+        "data": {
+          "$ref": "#/$defs/DataWeights"
+        },
+        "production": {
+          "default": 5,
+          "title": "Production",
+          "type": "integer"
+        },
+        "irreversible": {
+          "default": 5,
+          "title": "Irreversible",
+          "type": "integer"
+        },
+        "delegation": {
+          "default": 3,
+          "title": "Delegation",
+          "type": "integer"
+        },
+        "autonomy_per_level": {
+          "default": 2,
+          "title": "Autonomy Per Level",
+          "type": "integer"
+        },
+        "auto_approval": {
+          "default": 2,
+          "title": "Auto Approval",
+          "type": "integer"
+        }
+      },
+      "title": "Weights",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "apiVersion": {
+      "default": "agent-assurance/policy/v1",
+      "title": "Apiversion",
+      "type": "string"
+    },
+    "name": {
+      "default": "built-in defaults",
+      "title": "Name",
+      "type": "string"
+    },
+    "weights": {
+      "$ref": "#/$defs/Weights"
+    },
+    "bands": {
+      "$ref": "#/$defs/Bands"
+    },
+    "gate": {
+      "$ref": "#/$defs/Gate"
+    },
+    "promise": {
+      "$ref": "#/$defs/Promise"
+    },
+    "read_only_commands": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Read Only Commands",
+      "type": "array"
+    },
+    "catalog": {
+      "items": {
+        "$ref": "#/$defs/PolicyCatalogEntry"
+      },
+      "title": "Catalog",
+      "type": "array"
+    }
+  },
+  "title": "Agent Assurance Policy",
+  "type": "object",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/kunko-ai-labs/agent-assurance/schema/agent-assurance.policy.schema.json",
+  "description": "agent-assurance/policy/v1 — organisation overrides for weights, bands, gates, promise semantics, read-only commands and MCP catalogue."
+}

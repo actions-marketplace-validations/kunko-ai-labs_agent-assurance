@@ -61,6 +61,8 @@ def to_html(report: AssuranceReport, generated_at: str | None = None) -> str:
         else ("observed configuration only — no manifest declared" if report.sources else "declared manifest only")
     )
     out.append(f'<div class="meta">Framework: {_e(fw)} · Autonomy: L{m.autonomy} · {_e(mode)}</div>')
+    if report.policy:
+        out.append(f'<div class="meta">Policy: {_e(report.policy["name"])} · <code>{_e(report.policy["sha256"][:12])}</code></div>')
 
     # Summary cards
     out.append('<div class="grid">')

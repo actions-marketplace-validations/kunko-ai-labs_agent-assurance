@@ -1,0 +1,20 @@
+apiVersion: agent-assurance/v1
+
+# An organisation that knows its own ERP server and declares it.
+agent:
+  name: erp-reader
+  version: 1.0.0
+
+tools:
+  - name: web.fetch
+    type: read
+    system: web
+  - name: acme-erp.read
+    type: read
+    system: acme-erp
+
+data:
+  - type: credential
+    systems: [acme-erp]
+
+autonomy: 2

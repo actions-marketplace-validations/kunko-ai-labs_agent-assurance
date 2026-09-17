@@ -47,6 +47,8 @@ def to_markdown(report: AssuranceReport) -> str:
     if report.sources:
         mode = "declared manifest verified against observed configuration" if report.declared else "observed configuration only (no manifest declared)"
         lines.append(f"**Mode:** scan — {mode}")
+    if report.policy:
+        lines.append(f"**Policy:** {report.policy['name']} (`{report.policy['sha256'][:12]}`)")
     lines.append("")
 
     for r in report.results:

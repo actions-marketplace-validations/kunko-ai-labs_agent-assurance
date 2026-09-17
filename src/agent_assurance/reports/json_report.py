@@ -16,6 +16,7 @@ def to_dict(report: AssuranceReport) -> dict:
         },
         "verdict": report.verdict.value,
         "passed": report.passed,
+        "policy": report.policy,
         "checks": [
             {
                 "id": r.check_id,

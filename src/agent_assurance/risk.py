@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from . import policy
 from .manifest import DataClass, Manifest, ToolAccess
 
 # Per-property weights. Kept in one place so the model is auditable and tunable.
@@ -73,11 +74,12 @@ class RiskProfile:
     irreversible_actions: list[str] = field(default_factory=list)
     unknown_capabilities: list[str] = field(default_factory=list)
     auto_approved: list[str] = field(default_factory=list)
+    bands: list[tuple[int, str]] = field(default_factory=lambda: list(BANDS))
 
     @property
     def band(self) -> str:
         band = "LOW"
-        for threshold, name in BANDS:
+        for threshold, name in self.bands:
             if self.score >= threshold:
                 band = name
         return band
@@ -89,11 +91,18 @@ class RiskProfile:
 
 
 def assess(manifest: Manifest) -> RiskProfile:
-    """Compute the transparent risk profile of an agent manifest."""
-    p = RiskProfile()
+    """Compute the transparent risk profile of an agent manifest.
+
+    Weights come from the active policy; with no policy file they are exactly
+    the constants documented above.
+    """
+    pol = policy.current()
+    tool_weights = pol.weights.tools.as_map()
+    data_weights = pol.weights.data.as_map()
+    p = RiskProfile(bands=pol.bands.table())
 
     for tool in manifest.tools:
-        weight = TOOL_WEIGHTS.get(tool.type, 1)
+        weight = tool_weights.get(tool.type, 1)
         p.add(weight, f"tool '{tool.name}' ({tool.type.value})")
         if tool.system:
             p.systems.add(tool.system)
@@ -104,25 +113,25 @@ def assess(manifest: Manifest) -> RiskProfile:
         if tool.type == ToolAccess.UNKNOWN:
             p.unknown_capabilities.append(tool.name)
         if tool.production:
-            p.add(PRODUCTION_WEIGHT, f"tool '{tool.name}' acts on production")
+            p.add(pol.weights.production, f"tool '{tool.name}' acts on production")
         if tool.irreversible:
-            p.add(IRREVERSIBLE_WEIGHT, f"tool '{tool.name}' is irreversible")
+            p.add(pol.weights.irreversible, f"tool '{tool.name}' is irreversible")
             p.irreversible_actions.append(tool.name)
         if tool.approval == "auto" and tool.type is not ToolAccess.READ and not tool.scoped:
-            p.add(AUTO_APPROVAL_WEIGHT, f"tool '{tool.name}' runs without human approval")
+            p.add(pol.weights.auto_approval, f"tool '{tool.name}' runs without human approval")
             p.auto_approved.append(tool.name)
 
     for source in manifest.data:
-        weight = DATA_WEIGHTS.get(source.type, 1)
+        weight = data_weights.get(source.type, 1)
         p.add(weight, f"data access: {source.type.value}")
         p.data_classes.add(source.type.value)
         p.systems.update(source.systems)
 
     if manifest.delegation.enabled:
-        p.add(DELEGATION_WEIGHT, "delegation enabled")
+        p.add(pol.weights.delegation, "delegation enabled")
 
     if manifest.autonomy > 2:
-        extra = (manifest.autonomy - 2) * AUTONOMY_WEIGHT_PER_LEVEL
+        extra = (manifest.autonomy - 2) * pol.weights.autonomy_per_level
         p.add(extra, f"autonomy level L{manifest.autonomy} (above L2 approval)")
 
     return p

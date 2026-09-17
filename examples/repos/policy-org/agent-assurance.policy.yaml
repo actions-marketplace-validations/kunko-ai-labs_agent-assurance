@@ -1,0 +1,26 @@
+apiVersion: agent-assurance/policy/v1
+name: acme-corp-2026-09
+
+# The organisation's own MCP servers: no longer UNKNOWN.
+catalog:
+  - system: acme-erp
+    aliases: [acme-erp]
+    packages: [acme-erp-mcp]
+    capabilities:
+      - { suffix: read, access: read }
+    data: [financial]
+    source: "internal: platform team, ERP MCP server v2 exposes read-only endpoints"
+
+# A remote server in this org is not, by itself, network egress the promise
+# has to cover: the ERP gateway is inside the perimeter. Keep external_send
+# breaking for everything else.
+promise:
+  breaking_access: [write, delete, execute, financial]
+  breaking_data: [pii, health, credential]
+
+# Stricter than the defaults: anything HIGH already fails.
+gate:
+  review_bands: [MEDIUM]
+  fail_bands: [HIGH, CRITICAL]
+
+read_only_commands: [make lint, poetry run pytest]

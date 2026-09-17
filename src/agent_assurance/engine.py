@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from . import policy as _policy
 from .checks import ALL_CHECKS
 from .checks.base import CheckResult, Context, Status
 from .manifest import Manifest
@@ -25,6 +26,8 @@ class AssuranceReport:
     # Present when the report came from `scan`: what was looked at.
     sources: list[Source] = field(default_factory=list)
     declared: Manifest | None = None
+    # {"name", "path", "sha256"} of the policy that produced the verdict; None = defaults.
+    policy: dict | None = None
 
     @property
     def verdict(self) -> Status:
@@ -67,4 +70,5 @@ def run(
         results=results,
         sources=list(sources or []),
         declared=ctx.declared,
+        policy=_policy.describe(),
     )

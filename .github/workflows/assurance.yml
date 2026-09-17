@@ -172,3 +172,17 @@ jobs:
         run: |
           echo "::error::scan did NOT block an auto-approved shell under a declared L2 (outcome=${{ steps.gate.outcome }})"
           exit 1
+
+  scan-policy-org:
+    name: scan — organisation policy (own catalogue, stricter gate; must PASS with fail-on=fail)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          mode: scan
+          directory: examples/repos/policy-org
+          manifest: examples/repos/policy-org/agent-assurance.yaml
+          card: aa-card.html
+      - name: Assert the policy was recorded in the summary
+        run: grep -q "acme-corp-2026-09" aa-report.md && test -s aa-card.html

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import ClassVar
 
-from .. import risk
+from .. import policy, risk
 from ..manifest import Manifest
 from .base import Check, CheckResult, Context, StandardRef, Status
 
@@ -33,10 +33,11 @@ class BlastRadiusCheck(Check):
 
     def run(self, manifest: Manifest, ctx: Context) -> CheckResult:
         p = risk.assess(manifest)
+        gate = policy.current().gate
 
-        if p.band in FAIL_BANDS:
+        if p.band in gate.fail_bands:
             status = Status.FAIL
-        elif p.band in REVIEW_BANDS or p.unknown_capabilities:
+        elif p.band in gate.review_bands or p.unknown_capabilities:
             # An unclassified capability means the radius is not fully known;
             # that is never a silent PASS.
             status = Status.REVIEW

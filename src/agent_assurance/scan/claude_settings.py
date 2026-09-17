@@ -35,6 +35,7 @@ import json
 import os
 import re
 
+from .. import policy
 from ..manifest import Tool, ToolAccess
 from . import catalog
 from .base import Observation, Scanner, Source
@@ -82,8 +83,9 @@ def _bash_class(spec: str | None) -> tuple[ToolAccess, bool]:
         return ToolAccess.EXECUTE, False
     cmd = spec.split(":", 1)[0].strip()
     words = cmd.split()
-    for n in (2, 1):
-        if " ".join(words[:n]) in _READ_ONLY_COMMANDS:
+    read_only = _READ_ONLY_COMMANDS | set(policy.current().read_only_commands)
+    for n in (3, 2, 1):
+        if " ".join(words[:n]) in read_only:
             return ToolAccess.READ, True
     return ToolAccess.EXECUTE, True
 

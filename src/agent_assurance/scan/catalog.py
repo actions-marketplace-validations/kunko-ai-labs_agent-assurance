@@ -18,6 +18,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from .. import policy
 from ..manifest import DataClass, ToolAccess
 
 
@@ -258,10 +259,29 @@ def _tokens(name: str) -> set[str]:
     return {n} | {t for t in re.split(r"[-.\s/]+", n) if t}
 
 
+def _policy_entries() -> tuple[CatalogEntry, ...]:
+    return tuple(
+        CatalogEntry(
+            system=e.system,
+            capabilities=tuple(Capability(c.suffix, c.access, c.irreversible) for c in e.capabilities),
+            data=tuple(e.data),
+            packages=tuple(e.packages),
+            aliases=tuple(e.aliases),
+            source=e.source,
+        )
+        for e in policy.current().catalog
+    )
+
+
 def lookup(server_name: str, command_line: str) -> CatalogEntry | None:
-    """Find the catalogue entry for a server, or None (-> UNKNOWN)."""
+    """Find the catalogue entry for a server, or None (-> UNKNOWN).
+
+    Organisation entries from the active policy are consulted first, so a
+    team can name its own servers without forking the built-in table.
+    """
+    entries = _policy_entries() + CATALOG
     cl = _norm(command_line)
-    for entry in CATALOG:
+    for entry in entries:
         for pkg in entry.packages:
             if _norm(pkg) in cl:
                 return entry
@@ -269,7 +289,7 @@ def lookup(server_name: str, command_line: str) -> CatalogEntry | None:
     # Longest alias first so "brave-search" wins over a shorter alias; token
     # matching (not substring) keeps "digital" from matching "git".
     candidates = sorted(
-        ((alias, entry) for entry in CATALOG for alias in entry.aliases),
+        ((alias, entry) for entry in entries for alias in entry.aliases),
         key=lambda t: -len(t[0]),
     )
     for alias, entry in candidates:

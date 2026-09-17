@@ -42,6 +42,10 @@ inputs:
     description: "Upload the SARIF to GitHub code scanning (needs permissions: security-events: write)"
     required: false
     default: "false"
+  policy:
+    description: "Organisation policy file (weights, bands, promise semantics, own MCP catalogue). Default: agent-assurance.policy.yaml in the scanned directory, if present"
+    required: false
+    default: ""
   card:
     description: "Also write a single-file HTML capability card at this path (uploaded as an artifact)"
     required: false
@@ -90,6 +94,7 @@ runs:
           *)
             cmd=(agent-assurance check "${{ inputs.check }}" "${{ inputs.manifest }}") ;;
         esac
+        if [ -n "${{ inputs.policy }}" ]; then cmd+=(--policy "${{ inputs.policy }}"); fi
         printf '%q ' "${cmd[@]}" > .aa-cmd
         echo "command: $(cat .aa-cmd)"
 
@@ -162,6 +167,7 @@ runs:
         dir="${{ inputs.directory }}"
         cmd=(agent-assurance attest "$dir" --check "${{ inputs.check }}")
         if [ -f "${{ inputs.manifest }}" ]; then cmd+=(--manifest "${{ inputs.manifest }}"); fi
+        if [ -n "${{ inputs.policy }}" ]; then cmd+=(--policy "${{ inputs.policy }}"); fi
         "${cmd[@]}" --output aa-attestation.json || [ $? -ne 2 ]
         python3 - <<'PY' >> "$GITHUB_OUTPUT"
         import json, os

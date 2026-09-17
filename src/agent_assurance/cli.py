@@ -18,7 +18,7 @@ import json
 import os
 import sys
 
-from . import __version__, attest, diff, engine, reports
+from . import __version__, attest, diff, engine, policy, reports
 from .checks import CHECK_ALIASES
 from .checks.base import Context, Status
 from .manifest import Manifest, ManifestError
@@ -79,6 +79,23 @@ def _resolve_checks(name: str) -> list[str] | None:
     return [cid]
 
 
+def _apply_policy(args: argparse.Namespace, directory: str | None = None) -> int:
+    """Activate --policy, or <directory>/agent-assurance.policy.yaml if present."""
+    policy.reset()
+    path = getattr(args, "policy", None) or (policy.discover(directory) if directory else None)
+    if not path:
+        return EXIT_OK
+    try:
+        policy.activate(policy.load(path))
+    except FileNotFoundError:
+        print(f"error: policy not found: {path}", file=sys.stderr)
+        return EXIT_USAGE
+    except ManifestError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    return EXIT_OK
+
+
 def cmd_validate(args: argparse.Namespace) -> int:
     m = _load(args.manifest)
     if m is None:
@@ -90,6 +107,8 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
 
 def cmd_check(args: argparse.Namespace) -> int:
+    if _apply_policy(args, os.path.dirname(os.path.abspath(args.manifest))) != EXIT_OK:
+        return EXIT_USAGE
     m = _load(args.manifest)
     if m is None:
         return EXIT_USAGE
@@ -109,6 +128,8 @@ def _scan_report(args: argparse.Namespace):
     root = args.directory
     if not os.path.isdir(root):
         print(f"error: not a directory: {root}", file=sys.stderr)
+        return None, EXIT_USAGE
+    if _apply_policy(args, root) != EXIT_OK:
         return None, EXIT_USAGE
     declared = None
     manifest_path = args.manifest or os.path.join(root, "agent-assurance.yaml")
@@ -172,6 +193,9 @@ def cmd_diff(args: argparse.Namespace) -> int:
         if not os.path.isdir(d):
             print(f"error: not a directory: {d}", file=sys.stderr)
             return EXIT_USAGE
+    # The head side's policy governs the comparison (it is what the PR ships).
+    if _apply_policy(args, args.head) != EXIT_OK:
+        return EXIT_USAGE
     try:
         result = diff.compute(args.base, args.head, args.manifest)
     except ManifestError as exc:
@@ -219,6 +243,7 @@ def build_parser() -> argparse.ArgumentParser:
     pc.add_argument("manifest")
     pc.add_argument("--format", choices=list(_FORMATS.keys()), default="md")
     pc.add_argument("--output", "-o", default=None, help="write report to a file")
+    pc.add_argument("--policy", default=None, help="organisation policy file (default: agent-assurance.policy.yaml next to the manifest)")
     pc.add_argument(
         "--fail-on",
         choices=["fail", "review"],
@@ -238,6 +263,7 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--format", choices=list(_FORMATS.keys()), default="md")
     ps.add_argument("--output", "-o", default=None, help="write report to a file")
     ps.add_argument("--fail-on", choices=["fail", "review"], default="fail")
+    ps.add_argument("--policy", default=None, help="organisation policy file (default: <dir>/agent-assurance.policy.yaml)")
     ps.set_defaults(func=cmd_scan)
 
     pa = sub.add_parser("attest", help="write an in-toto statement (evidence) for what the config grants at this commit")
@@ -246,6 +272,7 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument("--check", default="all")
     pa.add_argument("--output", "-o", default=None)
     pa.add_argument("--fail-on", choices=["fail", "review"], default="fail")
+    pa.add_argument("--policy", default=None)
     pa.set_defaults(func=cmd_attest)
 
     pd = sub.add_parser("diff", help="compare two checked-out trees: what did this change do to the agent's reach and promise?")
@@ -256,6 +283,7 @@ def build_parser() -> argparse.ArgumentParser:
     pd.add_argument("--output", "-o", default=None)
     pd.add_argument("--fail-on", choices=["fail", "review"], default="fail", help="gate on the head verdict")
     pd.add_argument("--fail-on-delta", action="store_true", help="also gate when reach grows, the band rises or the promise breaks")
+    pd.add_argument("--policy", default=None, help="organisation policy file (default: <head>/agent-assurance.policy.yaml)")
     pd.set_defaults(func=cmd_diff)
     return p
 

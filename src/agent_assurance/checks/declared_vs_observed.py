@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from typing import ClassVar
 
+from .. import policy
 from ..manifest import DataClass, Manifest, ToolAccess
 from .base import Check, CheckResult, Context, Location, StandardRef, Status
 
@@ -66,6 +67,9 @@ class DeclaredVsObservedCheck(Check):
         declared = ctx.declared
         observed = ctx.observed
         assert declared is not None and observed is not None
+        pol = policy.current().promise
+        breaking_access = set(pol.breaking_access)
+        breaking_data = set(pol.breaking_data)
 
         declared_access = {t.type for t in declared.tools}
         declared_data = {d.type for d in declared.data}
@@ -92,16 +96,16 @@ class DeclaredVsObservedCheck(Check):
                 note(unknown, f"`{t.name}` could not be classified", t.source)
                 continue
             if t.type not in declared_access:
-                bucket = broken if t.type in _BREAKING_ACCESS else review
+                bucket = broken if t.type in breaking_access else review
                 note(bucket, f"`{t.name}` grants **{t.type.value}**, not declared", t.source)
                 if bucket is broken and t.system:
                     broken_systems.add(t.system)
 
         # 2. Autonomy is a promise too: L0-L2 means a human approves actions.
         #    A host rule that auto-approves a non-read tool removes that human.
-        if declared.autonomy <= 2:
+        if declared.autonomy <= pol.max_autonomy_with_human:
             for t in observed.tools:
-                if t.approval != "auto" or t.type not in _BREAKING_ACCESS:
+                if t.approval != "auto" or t.type not in breaking_access:
                     continue
                 if t.scoped:
                     note(review, f"`{t.name}` is auto-approved (scoped) under declared autonomy L{declared.autonomy}", t.source)
@@ -118,12 +122,12 @@ class DeclaredVsObservedCheck(Check):
         #    rest are extra reach, reported only for systems not already broken.
         undeclared_data = [d for d in observed.data if d.type not in declared_data]
         for d in undeclared_data:
-            if d.type in _BREAKING_DATA:
+            if d.type in breaking_data:
                 systems = ", ".join(d.systems) or "unspecified"
                 note(broken, f"access to **{d.type.value}** data ({systems}), not declared", d.source)
                 broken_systems.update(d.systems)
         for d in undeclared_data:
-            if d.type not in _BREAKING_DATA and not set(d.systems) <= broken_systems:
+            if d.type not in breaking_data and not set(d.systems) <= broken_systems:
                 systems = ", ".join(d.systems) or "unspecified"
                 note(review, f"access to **{d.type.value}** data ({systems}), not declared", d.source)
 

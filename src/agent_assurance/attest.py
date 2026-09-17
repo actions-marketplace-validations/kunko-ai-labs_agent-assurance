@@ -75,6 +75,7 @@ def build(root: str, manifest_path: str | None, report: engine.AssuranceReport) 
         "declared": report.declared.model_dump(mode="json") if report.declared else None,
         "observed": report.manifest.model_dump(mode="json"),
         "report": report_dict(report),
+        "policy": report.policy,
         "standards": sorted(
             {f"{s.framework}:{s.control}" for r in report.results for s in r.standards}
         ),
