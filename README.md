@@ -98,7 +98,7 @@ agent-assurance check all agent-assurance.yaml --format sarif -o aa.sarif
 ## GitHub Action
 
 ```yaml
-- uses: kunko-ai/agent-assurance@v0.1
+- uses: kunko-ai-labs/agent-assurance@v0.1
   with:
     manifest: agent-assurance.yaml
     fail-on: fail        # or: review
