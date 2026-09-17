@@ -46,7 +46,7 @@ def test_predicate_carries_declared_observed_and_verdict(tmp_path):
 def test_attest_without_manifest_has_only_config_subjects(tmp_path):
     code, s = _statement(REPOS / "mcp-unknown-server", tmp_path)
     assert code == cli.EXIT_OK
-    assert {x["name"] for x in s["subject"]} == {".mcp.json", ".claude/settings.json"}
+    assert {x["name"] for x in s["subject"]} == {".mcp.json", ".claude/settings.json"}  # AGENTS.md is not parsed
     assert s["predicate"]["declared"] is None
 
 

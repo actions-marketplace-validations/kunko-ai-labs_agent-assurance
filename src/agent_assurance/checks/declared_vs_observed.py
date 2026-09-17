@@ -96,8 +96,9 @@ class DeclaredVsObservedCheck(Check):
                 note(unknown, f"`{t.name}` could not be classified", t.source)
                 continue
             if t.type not in declared_access:
-                bucket = broken if t.type in breaking_access else review
-                note(bucket, f"`{t.name}` grants **{t.type.value}**, not declared", t.source)
+                bucket = broken if t.type in breaking_access and not t.inferred else review
+                suffix = " (class inferred from its name — verify)" if t.inferred else ""
+                note(bucket, f"`{t.name}` grants **{t.type.value}**, not declared{suffix}", t.source)
                 if bucket is broken and t.system:
                     broken_systems.add(t.system)
 

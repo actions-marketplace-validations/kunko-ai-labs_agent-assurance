@@ -186,3 +186,21 @@ jobs:
           card: aa-card.html
       - name: Assert the policy was recorded in the summary
         run: grep -q "acme-corp-2026-09" aa-report.md && test -s aa-card.html
+
+  scan-codex-and-tools:
+    name: scan — Codex config.toml + serialized tool definitions (must BLOCK on the token, review the guess)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: gate
+        continue-on-error: true
+        uses: ./
+        with:
+          mode: scan
+          directory: examples/repos/codex-and-tools
+          manifest: examples/repos/codex-and-tools/agent-assurance.yaml
+      - name: Assert the gate tripped and the inferred class stayed a review
+        if: steps.gate.outcome != 'failure'
+        run: |
+          echo "::error::scan did NOT block an undeclared credential from .codex/config.toml"; exit 1
+      - run: grep -q "inferred from its name" aa-report.md

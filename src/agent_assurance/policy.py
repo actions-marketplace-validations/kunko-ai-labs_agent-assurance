@@ -123,6 +123,8 @@ class Policy(BaseModel):
     read_only_commands: list[str] = Field(default_factory=list)
     # Organisation MCP servers; matched before the built-in catalogue.
     catalog: list[PolicyCatalogEntry] = Field(default_factory=list)
+    # Extra serialized tool-definition files to scan (repo-relative paths).
+    tool_definition_files: list[str] = Field(default_factory=list)
     # Provenance, filled by load().
     path: str | None = None
     sha256: str | None = None

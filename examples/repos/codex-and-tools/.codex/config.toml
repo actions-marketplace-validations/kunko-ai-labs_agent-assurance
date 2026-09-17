@@ -1,0 +1,10 @@
+# OpenAI Codex CLI project config
+model = "o4-mini"
+
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+env = { GITHUB_PERSONAL_ACCESS_TOKEN = "${GITHUB_TOKEN}" }
+
+[mcp_servers.acme-crm]
+url = "https://mcp.acme.example/crm"

@@ -1,0 +1,23 @@
+apiVersion: agent-assurance/v1
+
+# Promise: a CRM assistant that reads and updates contacts. No money.
+agent:
+  name: crm-assistant
+  version: 0.3.0
+
+framework:
+  name: openai-agents
+
+tools:
+  - name: crm.search_contacts
+    type: read
+    system: crm
+  - name: crm.update_contact
+    type: write
+    system: crm
+
+data:
+  - type: pii
+    systems: [crm]
+
+autonomy: 2

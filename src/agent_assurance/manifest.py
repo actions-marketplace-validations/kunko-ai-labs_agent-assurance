@@ -57,6 +57,10 @@ class Tool(BaseModel):
     # A scoped grant is still the capability class, but a person chose the
     # scope: it is not "the agent may run anything".
     scoped: bool = False
+    # Class inferred from the tool's name/description (serialized tool
+    # definitions), not read from a catalogue or a rule. A guess is scored,
+    # but never fails a promise on its own.
+    inferred: bool = False
 
 
 class DataSource(BaseModel):

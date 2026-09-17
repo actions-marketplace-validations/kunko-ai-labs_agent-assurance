@@ -51,7 +51,7 @@ def test_unknown_server_is_unknown_not_guessed():
 def test_unsupported_files_are_listed_not_silent():
     result = scan_directory(UNKNOWN)
     unsupported = [s for s in result.sources if not s.supported]
-    assert [s.path for s in unsupported] == [".codex/config.toml"]
+    assert [s.path for s in unsupported] == ["AGENTS.md"]
 
 
 def test_declared_metadata_survives_merge():
@@ -146,11 +146,10 @@ def test_unknown_plus_undeclared_secret_is_a_broken_promise(tmp_path):
 
 
 def test_nothing_to_scan_is_a_usage_error(tmp_path, capsys):
-    (tmp_path / ".codex").mkdir()
-    (tmp_path / ".codex" / "config.toml").write_text("", encoding="utf-8")
+    (tmp_path / "AGENTS.md").write_text("# instructions\n", encoding="utf-8")
     assert cli.main(["scan", str(tmp_path)]) == cli.EXIT_USAGE
     err = capsys.readouterr().err
-    assert "nothing to scan" in err and ".codex/config.toml" in err
+    assert "nothing to scan" in err and "AGENTS.md" in err
 
 
 @pytest.mark.parametrize(

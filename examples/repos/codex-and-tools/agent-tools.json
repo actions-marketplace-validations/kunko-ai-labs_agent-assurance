@@ -1,0 +1,28 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "crm.search_contacts",
+      "description": "Search contacts by name or email.",
+      "parameters": {"type": "object", "properties": {"q": {"type": "string"}}}
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "crm.update_contact",
+      "description": "Update a contact's fields.",
+      "parameters": {"type": "object", "properties": {"id": {"type": "string"}}}
+    }
+  },
+  {
+    "name": "billing.issue_refund",
+    "description": "Refund a charge to the customer's card.",
+    "input_schema": {"type": "object", "properties": {"charge_id": {"type": "string"}}}
+  },
+  {
+    "name": "wibble",
+    "description": "Does something.",
+    "args_schema": {"type": "object"}
+  }
+]

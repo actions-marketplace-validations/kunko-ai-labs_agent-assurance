@@ -14,14 +14,15 @@ from dataclasses import dataclass, field
 from ..manifest import AgentInfo, DataSource, FrameworkSpec, Manifest, Tool
 from .base import Observation, Scanner, Source
 from .claude_settings import ClaudeSettingsScanner
+from .codex_toml import CodexTomlScanner
 from .mcp_json import McpJsonScanner
+from .tool_defs import ToolDefsScanner
 
-SCANNERS: list[Scanner] = [McpJsonScanner(), ClaudeSettingsScanner()]
+SCANNERS: list[Scanner] = [McpJsonScanner(), CodexTomlScanner(), ClaudeSettingsScanner(), ToolDefsScanner()]
 
 # Recognised but not parsed yet. Listed so the report can say "detected, not
 # supported" instead of staying silent. Each becomes a scanner in its own issue.
 KNOWN_UNSUPPORTED: dict[str, str] = {
-    ".codex/config.toml": "codex-config (TOML: [mcp_servers.<name>])",
     "claude_desktop_config.json": "claude-desktop (user scope, not a repo file)",
     "AGENTS.md": "agent instructions (not permissions; see ruleblast for instruction blast radius)",
 }

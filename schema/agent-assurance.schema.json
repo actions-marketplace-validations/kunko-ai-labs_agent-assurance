@@ -93,6 +93,16 @@
               "ask"
             ],
             "description": "Observed human-in-the-loop status from the host's permission rules. Not set on declared tools; autonomy is the declared equivalent."
+          },
+          "scoped": {
+            "type": "boolean",
+            "default": false,
+            "description": "Observed rule narrowed to specific commands/paths."
+          },
+          "inferred": {
+            "type": "boolean",
+            "default": false,
+            "description": "Class inferred from the tool's name/description; never fails a promise on its own."
           }
         }
       }
