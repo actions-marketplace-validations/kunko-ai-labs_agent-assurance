@@ -14,7 +14,7 @@ from ..engine import AssuranceReport
 
 # SARIF levels: error / warning / note.
 _LEVEL = {Status.FAIL: "error", Status.REVIEW: "warning", Status.PASS: "note"}
-_TOOL_URI = "https://github.com/kunko-ai/agent-assurance"
+_TOOL_URI = "https://github.com/kunko-ai-labs/agent-assurance"
 
 
 def to_dict(report: AssuranceReport, manifest_path: str = "agent-assurance.yaml") -> dict:
