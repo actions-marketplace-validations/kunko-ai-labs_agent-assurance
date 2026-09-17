@@ -13,8 +13,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/kunko-ai/agent-assurance"
-Repository = "https://github.com/kunko-ai/agent-assurance"
+Homepage = "https://github.com/kunko-ai-labs/agent-assurance"
+Repository = "https://github.com/kunko-ai-labs/agent-assurance"
 
 [project.scripts]
 agent-assurance = "agent_assurance.cli:main"
