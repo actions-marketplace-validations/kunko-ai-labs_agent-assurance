@@ -1,0 +1,12 @@
+# Use from another repo's .pre-commit-config.yaml:
+#   - repo: https://github.com/kunko-ai-labs/agent-assurance
+#     rev: v0.3.0
+#     hooks:
+#       - id: agent-assurance-scan
+- id: agent-assurance-scan
+  name: agent-assurance scan (declared vs observed)
+  description: Verify the agent configuration against agent-assurance.yaml before it is committed.
+  entry: agent-assurance scan .
+  language: python
+  pass_filenames: false
+  files: ^(\.mcp\.json|\.claude/settings(\.local)?\.json|\.cursor/mcp\.json|\.vscode/mcp\.json|\.gemini/settings\.json|agent-assurance\.yaml)$

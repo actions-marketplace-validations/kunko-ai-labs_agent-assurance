@@ -2,7 +2,9 @@
 
 ## Qué es (y qué no)
 
-**Declarado vs observado.** El manifiesto (`agent-assurance.yaml`) es la **promesa** de lo que un agente de IA puede hacer; `scan` **observa** lo que la configuración del repo concede de verdad (`.mcp.json` hoy; más fuentes después) y AA-002 falla el PR si la promesa se rompe, señalando fichero:línea. AA-001 mide el radio de impacto. Todo transparente, en markdown/JSON/SARIF, con exit code que bloquea.
+**Declarado vs observado.** El manifiesto (`agent-assurance.yaml`) es la **promesa** de lo que un agente de IA puede hacer; `scan` **observa** lo que la configuración del repo concede de verdad (configs MCP de Claude Code/Cursor/Gemini/VS Code y permisos de Claude Code) y AA-002 falla si la promesa se rompe, señalando fichero:línea. `diff` dice qué hizo *este cambio*. AA-001 mide el radio de impacto. Tres puntos de aplicación con el mismo motor: al editar (hook / servidor MCP `would_break`), en el PR (Action `mode: diff` con comentario) y en cada push/release (SARIF).
+
+Modelo de permisos de Claude Code: `allow` no concede capacidad, **quita al humano del bucle** (aprobación); las reglas se colapsan por clase; los comandos de solo lectura son `read`; una regla acotada es `scoped` y no rompe la promesa (solo *review*).
 
 Por qué esto y no "diff de permisos": ya existe ×5 sin tracción (`docs/landscape.md`). Nadie verifica promesas ni mapea a OWASP.
 
@@ -26,6 +28,9 @@ No es: un motor en runtime, un interceptor de tool calls, un ledger, un sistema 
 - Ejemplos en `examples/` cubren las cuatro bandas (safe=LOW, medium=MEDIUM, high=HIGH, dangerous=CRITICAL); `examples/repos/` cubre promesa cumplida / rota / no verificable. Un check o un scanner nuevo añade su fixture y su job en `assurance.yml`.
 - Antes de una feature nueva: pasada corta de mercado con fuente y fecha (`docs/landscape.md`), y proponer la versión que nadie ocupa.
 - Commits en inglés, imperativo, prefijo `feat:|fix:|ci:|docs:|test:`.
+- Nombres de paso en `action.yml` con `:` van entre comillas (un YAML roto tumba todos los jobs); `tests/test_action_yaml.py` lo comprueba.
+- El GIF del README se regenera con `vhs docs/demo.tape` + el ffmpeg del comentario del tape; VHS necesita ejecutarse fuera del sandbox.
+- Probar en repos ajenos reales antes de cada release (17/09: ocho repos; salieron tres falsos positivos que un senior habría rechazado).
 
 ## Roadmap vigente
 

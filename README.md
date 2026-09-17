@@ -1,68 +1,72 @@
 # Agent Assurance
 
-**Declare what your agent may do. Verify it on every PR.**
+**Declare what your agent may do. Verify it on every edit, every PR, every release.**
 
-Your repo *promises* what an AI agent is allowed to do (`agent-assurance.yaml`: read the CRM, no external send, autonomy L2). Agent Assurance *observes* what the repo's configuration actually grants (`.mcp.json` today, more sources coming), scores the blast radius, maps it to OWASP Agentic security standards, and fails the PR when the promise is broken — pointing at the file and line that broke it. No dashboard, no backend, no LLM in the verdict. A rule-based model you can read and reproduce by hand.
+Your repo *promises* what an AI agent is allowed to do (`agent-assurance.yaml`: read the CRM, no external send, a human approves actions). Agent Assurance *observes* what the configuration actually grants — MCP servers, Claude Code permissions — scores the blast radius, maps it to OWASP Agentic standards, and fails the change when the promise is broken, pointing at the file and line that broke it.
+
+No dashboard, no backend, no LLM in the verdict, no network calls, nothing executed. A rule-based model you can read and reproduce by hand.
+
+![agent-assurance: a PR adds a GitHub MCP server to a read-only agent and gets blocked](docs/demo.gif)
 
 ```bash
-pip install agent-assurance
-agent-assurance scan .            # observe the config, verify the promise if agent-assurance.yaml exists
-agent-assurance check all agent-assurance.yaml   # the promise alone: how much could this agent break?
-```
-
-```
-❌ AA-002 — Declared vs Observed · FAIL
-Promise broken: 5 undeclared capabilities
-- Declared: read; data: internal
-- BROKEN — `github.write` grants **write**, not declared (.mcp.json:11)
-- BROKEN — `slack.post_message` grants **external_send**, not declared (.mcp.json:16)
-- BROKEN — access to **credential** data (github), not declared (.mcp.json:11)
+pipx install agent-assurance          # or: pip install agent-assurance
+agent-assurance scan .                # observe the config; verify the promise if agent-assurance.yaml exists
 ```
 
 ---
 
-## Why
+## Why this exists
 
-Agents are moving from chat into production: writing to CRMs, sending email, touching infrastructure, moving money. When an agent changes — a new MCP server, a broader permission, a jump in autonomy — nobody notices until something breaks.
+Agents are moving from chat into production: writing to CRMs, sending email, touching infrastructure, moving money. When an agent changes — a new MCP server, a broader permission, an `allow` that removes the human from the loop — nobody notices until something breaks.
 
-Vulnerability scanners look for poisoned tools and leaked secrets. Permission-diff bots show what changed. Neither answers the governance question: **does this agent still do only what we said it does?** Agent Assurance answers it where developers already work — the PR — with deterministic checks that map to the **OWASP Top 10 for Agentic Applications (ASI01–ASI10)**, and leaves a per-commit record an auditor can reconstruct (the shape EU AI Act art. 12 asks for).
+Vulnerability scanners look for poisoned tools and leaked secrets. Permission-diff bots show what changed. Neither answers the governance question: **does this agent still do only what we said it does?** Agent Assurance answers it with deterministic checks that map to the **OWASP Top 10 for Agentic Applications (ASI01–ASI10)**, and leaves a per-commit record an auditor can reconstruct — the shape EU AI Act art. 12 asks for. See [`docs/landscape.md`](docs/landscape.md) for what else exists and why this sits where it sits.
+
+## One promise, three enforcement points
+
+| When | How | What the person sees |
+|---|---|---|
+| **While the agent edits** | Claude Code [PostToolUse hook](contrib/claude-code/) or the [MCP server](contrib/claude-code/) (`would_break`) | The agent is told, in the same turn, that its edit breaks the promise — before a commit exists |
+| **In the pull request** | GitHub Action `mode: diff` | One comment: *"Promise broken by this change: `github.write` grants write, not declared (.mcp.json:17)"*; job goes red |
+| **On every push / release** | Action `mode: scan` + SARIF | The verdict in the Security tab and the job summary, anchored at file:line, with a stable fingerprint per finding |
+
+Same engine, same verdict, same words in all three.
 
 ## Two inputs, one verdict
 
 | | What it is | Where it comes from |
 |---|---|---|
-| **Declared** | The promise: which capability classes, systems, data and autonomy the agent is *meant* to have | `agent-assurance.yaml`, written by the team |
-| **Observed** | What the configuration *actually grants* — and whether a human is still in the loop | `scan`: `.mcp.json` (project MCP servers, via a [curated catalogue](src/agent_assurance/scan/catalog.py)) and Claude Code `.claude/settings.json` permissions. Unknown servers and tools are `UNKNOWN`, never guessed |
-
-Checks:
+| **Declared** | The promise: capability classes, systems, data and autonomy the agent is *meant* to have | `agent-assurance.yaml`, written by the team |
+| **Observed** | What the configuration *actually grants* — and whether a human is still in the loop | `scan`: MCP server configs for Claude Code, Cursor, Gemini CLI and VS Code (via a [curated, sourced catalogue](src/agent_assurance/scan/catalog.py)), and Claude Code `.claude/settings.json` permissions. Unknown servers and tools are `UNKNOWN`, never guessed |
 
 | Check | Question | Verdict |
 |---|---|---|
 | **AA-001 Blast Radius** | If this agent misbehaves, how much can it break? | LOW/MEDIUM pass · HIGH review · CRITICAL fail · any `UNKNOWN` ≥ review |
-| **AA-002 Declared vs Observed** | Does the configuration stay within the promise? | Undeclared write/delete/execute/external_send/financial or sensitive data → **fail** · extra reach or `UNKNOWN` → review · within → pass |
+| **AA-002 Declared vs Observed** | Does the configuration stay within the promise? | Undeclared write/delete/execute/external_send/financial, sensitive data, or an unscoped auto-approval under declared autonomy ≤ L2 → **fail** · extra reach, scoped auto-approval or `UNKNOWN` → review · within → pass |
 
-`scan` without a manifest still works: you get the observed blast radius and a "Sources scanned" table. `check` on a manifest alone runs AA-001 only.
+`scan` without a manifest still works: you get the observed blast radius and a "Sources scanned" table. `check` on a manifest alone runs AA-001 only. `diff` compares two trees and tells you what *this change* did.
 
-### What the scanner understands
+## What you get in a PR
 
-**`.mcp.json`** — each server becomes a system. Its access classes come from the catalogue entry for its package or name (e.g. `@modelcontextprotocol/server-github` → read, write). A remote `url` is network egress (`external_send`); an `env`/`headers` name that looks like a credential is credential access (the value is never read). A server not in the catalogue is `UNKNOWN`.
+```
+❌ PROMISE BROKEN BY THIS CHANGE
 
-**`.claude/settings.json`** (and `settings.local.json`) — Claude Code's built-in tools exist whether or not they are listed; a permission rule decides whether a **human approves** the call. So `allow` = runs without approval, `ask` = a person confirms, `deny` = removed. Precedence: deny > ask > allow.
+Agent: analytics-helper v1.0.0 · Autonomy: L2
+Blast radius: LOW → HIGH ⬆️
+Promise (AA-002): PASS → FAIL
 
-| Rule | Class | System | Blast-radius points |
-|---|---|---|---|
-| `Read`, `Glob`, `Grep`, `LS` | read | filesystem | 1 |
-| `Edit`, `Write`, `MultiEdit`, `NotebookEdit` | write | filesystem | 3 (+2 if `allow`) |
-| `Bash(...)` | execute | shell | 3 (+2 if `allow`) |
-| `WebFetch`, `WebSearch` | read | web | 1 |
-| `Agent`, `Task` | execute | subagents | 3 (+2 if `allow`) |
-| `mcp__<server>__<tool>`, `mcp__<server>` | the server's widest class from the catalogue | server | as the class (+2 if `allow`) |
-| `defaultMode: acceptEdits` / `bypassPermissions` | write / execute, auto-approved | — | 3+2 |
-| anything else | unknown | — | 3 |
+❌ Newly broken
+- `github.write` grants write, not declared (.mcp.json:17)
+- `github.push` grants write, not declared (.mcp.json:17)
+- access to credential data (github), not declared (.mcp.json:17)
 
-AA-002 treats autonomy as part of the promise: a manifest with `autonomy: 2` (a human approves actions) is **broken** by an `allow` rule on a write/execute/external tool. Declare `autonomy: 3` if that is intended.
+➕ Capabilities added
+- `github.read` read on `github` (.mcp.json:17)
+- `github.write` write on `github` (.mcp.json:17)
 
-Every scan ends with a **Sources scanned** table: files parsed, files detected but not supported yet (`.cursor/mcp.json`, `.vscode/mcp.json`, `.gemini/settings.json`, `.codex/config.toml`), and what was deduced from each. A repo with nothing scannable and nothing declared exits 2 — never an empty PASS.
+Declared promise: read; autonomy L2. Edit agent-assurance.yaml if this change is intended.
+```
+
+Live example: [the open demo PR](https://github.com/kunko-ai-labs/agent-assurance/pull/16) stays red on purpose.
 
 ## The manifest is the promise
 
@@ -75,9 +79,6 @@ agent:
   version: 1.0.0
 framework:
   name: langgraph
-model:
-  provider: ollama
-  name: llama-3.1
 tools:
   - name: crm.read
     type: read
@@ -88,33 +89,32 @@ tools:
 data:
   - type: pii
     systems: [crm]
-autonomy: 2
+autonomy: 2          # a human approves actions
 delegation:
   enabled: false
 ```
 
-Define it once; blast-radius, governance-diff, evidence-contract and action-trust all read it.
+Schema: [`schema/agent-assurance.schema.json`](schema/agent-assurance.schema.json). The manifest is framework-agnostic on purpose: it describes *what the agent may reach*, not how it is built.
 
-## What you get in a PR
+## What the scanner understands
 
-```
-🤖 Agent Assurance
+**MCP server configs** — `.mcp.json` (Claude Code), `.cursor/mcp.json`, `.gemini/settings.json`, `.vscode/mcp.json`. Each server becomes a system. Its access classes come from the catalogue entry for its package or name (e.g. `@modelcontextprotocol/server-github` → read, write). A remote `url` is network egress; an `env`/`headers` name that looks like a credential is credential access (the value is never read). The same server declared for several hosts counts once. A server not in the catalogue is `UNKNOWN`.
 
-❌ AGENT ASSURANCE FAILED
+**Claude Code permissions** — `.claude/settings.json` and `settings.local.json`. Claude Code's built-in tools exist whether or not they are listed; a rule decides whether a **human approves** the call. So `allow` = runs without approval, `ask` = a person confirms, `deny` = removed. Precedence: deny > ask > allow. Rules collapse per capability class: ten `allow: Bash(...)` rules are one shell grant, not ten.
 
-Agent: autonomous-finance-agent v0.9.0
-Framework: crewai · Autonomy: L4
+| Rule | Class | Notes |
+|---|---|---|
+| `Read`, `Glob`, `Grep`, `LS`, `WebFetch`, `WebSearch` | read | |
+| `Edit`, `Write`, `MultiEdit`, `NotebookEdit` | write | +2 points if `allow` and unscoped |
+| `Bash`, `Bash(*)` | execute, unscoped | +2 points if `allow`; breaks a promise of autonomy ≤ L2 |
+| `Bash(git status:*)`, `Bash(grep:*)`, `Bash(ls:*)`… | read (scoped) | read-only commands are not "the agent runs shell unattended" |
+| `Bash(npm test:*)`, any other scoped command | execute (scoped) | no auto-approval penalty; AA-002 says *review*, not *broken* |
+| `Agent`, `Task` | execute (subagents) | |
+| `mcp__<server>__<tool>`, `mcp__<server>` | the server's widest class from the catalogue | a single tool is scoped; a whole server is not |
+| `defaultMode: acceptEdits` / `bypassPermissions` | write / execute, auto-approved | |
+| anything else | unknown | scored as write, never as safe |
 
-### ❌ AA-001 — Blast Radius · FAIL
-Blast radius CRITICAL (score 50)
-- Systems affected: aws, bank, crm, email
-- Sensitive data: credential, financial, pii
-- Write capabilities: crm.write, aws.delete
-- External side effects: email.send
-- Irreversible actions: aws.delete, bank.transfer
-- Autonomy: L4
-Standards: OWASP-ASI:ASI08, OWASP-ASI:ASI03, OWASP-APTS:APTS-SC-020 (adapted)
-```
+Every scan ends with a **Sources scanned** table: files parsed, files detected but not supported yet (`.codex/config.toml`, `AGENTS.md`), and what was deduced from each. A repo with nothing scannable and nothing declared exits 2 — never an empty PASS.
 
 ## The risk model is transparent
 
@@ -129,64 +129,106 @@ Not an "AI risk score". Every point is attributable:
 | delegation enabled | +3 |
 | autonomy above L2 | +2 per level |
 | tool of unknown class (`UNKNOWN`) | 3 (scored as write, never as safe) |
-| non-read tool auto-approved by the host (no human in the loop) | +2 |
+| non-read, unscoped tool auto-approved by the host | +2 |
 
-Bands: LOW `<8` · MEDIUM `<16` · HIGH `<28` · CRITICAL `>=28`. HIGH → review, CRITICAL → fail (configurable with `--fail-on`).
+Bands: LOW `<8` · MEDIUM `<16` · HIGH `<28` · CRITICAL `>=28`. HIGH → review, CRITICAL → fail (configurable with `--fail-on`). Weights live in one file, [`risk.py`](src/agent_assurance/risk.py).
 
-## CLI
+## Use it
+
+### CLI
 
 ```bash
-agent-assurance validate agent-assurance.yaml          # schema-check the manifest
-agent-assurance check blast-radius agent-assurance.yaml # run a check (markdown)
-agent-assurance check all agent-assurance.yaml --format json
-agent-assurance scan .                                  # observe + verify (picks up ./agent-assurance.yaml)
+agent-assurance scan .                                   # observe + verify (picks up ./agent-assurance.yaml)
 agent-assurance scan path/to/repo -m promise.yaml --format sarif -o aa.sarif
+agent-assurance diff base-checkout head-checkout --fail-on-delta   # what did this change do?
+agent-assurance check all agent-assurance.yaml           # the promise alone: how much could it break?
+agent-assurance validate agent-assurance.yaml            # schema-check
 ```
 
-Try the bundled repos under `examples/repos/`: `mcp-promise-kept` (PASS), `mcp-promise-broken` (FAIL), `mcp-unknown-server` (REVIEW), `claude-code-approval-kept` (PASS), `claude-code-approval-broken` (FAIL: `allow: Bash(*)` with a declared L2).
+Formats: `md` (PR comment / job summary), `json` (pipelines), `sarif` (GitHub code scanning; PASS is `kind: pass` so a clean agent never creates an alert; `diff` adds `baselineState`).
 
-`--format sarif` surfaces findings in the GitHub Security tab (a PASS is emitted as `kind: pass`, so a clean agent never creates an alert).
+**Exit codes are a contract:** `0` pass (REVIEW too, unless `--fail-on review`) · `1` gate tripped · `2` usage/manifest error. Tested in `tests/test_cli_contract.py` and exercised with the installed binary in CI.
 
-Exit codes are a contract: `0` pass (REVIEW too, unless `--fail-on review`) · `1` gate tripped · `2` usage/manifest error. That is what lets it gate a pipeline out of the box.
+Try the bundled repos under `examples/repos/`: `mcp-promise-kept` (PASS), `mcp-promise-broken` (FAIL), `mcp-unknown-server` (REVIEW), `claude-code-approval-kept` (PASS), `claude-code-approval-broken` (FAIL: `allow: Bash(*)` under a declared L2).
 
-## GitHub Action
+### GitHub Action
 
 ```yaml
 permissions:
   contents: read
+  pull-requests: write     # only for the diff comment
   security-events: write   # only if upload-sarif: true
 
 steps:
   - uses: actions/checkout@v4
-  - uses: kunko-ai-labs/agent-assurance@v0.1
+  - uses: kunko-ai-labs/agent-assurance@v0.3
     with:
-      mode: scan             # observe .mcp.json and verify it against the manifest
+      mode: diff             # on pull_request: what did this change do? (comment + gate)
+      # mode: scan           # on push: observe + verify, SARIF to the Security tab
       manifest: agent-assurance.yaml
       fail-on: fail          # or: review
-      sarif: aa.sarif        # optional: write a SARIF file
-      upload-sarif: "true"   # optional: send it to the Security tab
+      fail-on-delta: "true"  # diff: also fail when reach grows or the promise breaks
+      sarif: aa.sarif        # optional
+      upload-sarif: "true"   # optional
 ```
 
-The markdown report lands in the job summary; the job fails when the gate trips. See [`.github/workflows/assurance.yml`](.github/workflows/assurance.yml) for the repo's own dogfood, which asserts that the gate blocks what it should.
+The markdown report lands in the job summary; in `diff` mode one PR comment is created and then updated on every push. This repo's own [`assurance.yml`](.github/workflows/assurance.yml) asserts that the Action passes what it should and blocks what it should — a green run means the gate still works.
 
-## Standards mapping
+### pre-commit
 
-Checks map primarily to the **OWASP Top 10 for Agentic Applications** (business agents). Where a control is borrowed from **OWASP APTS** (a standard for *autonomous penetration-testing* platforms), it is labelled `(adapted)` — we do not claim APTS conformance for business agents. Honesty about relation is part of the tool.
+```yaml
+- repo: https://github.com/kunko-ai-labs/agent-assurance
+  rev: v0.3.0
+  hooks:
+    - id: agent-assurance-scan
+```
+
+### Inside the agent's own session
+
+```bash
+pip install "agent-assurance[mcp]"
+claude mcp add agent-assurance -- agent-assurance-mcp
+```
+
+Tools `scan`, `check` and `would_break`: the agent can ask *"if I add this MCP server, does the promise break?"* before touching a file. Or install the [PostToolUse hook](contrib/claude-code/) and the agent is told the moment an edit breaks the promise. Details in [`contrib/claude-code/`](contrib/claude-code/).
+
+### As a library
+
+```python
+from agent_assurance import engine
+from agent_assurance.checks.base import Context
+from agent_assurance.manifest import Manifest
+from agent_assurance.scan import scan_directory
+
+declared = Manifest.from_file("agent-assurance.yaml")
+result = scan_directory(".", declared)
+report = engine.run(result.observed, ctx=Context(declared=declared, observed=result.observed), sources=result.sources)
+print(report.verdict, [(r.check_id, r.status.value) for r in report.results])
+```
+
+Add a source: subclass `scan.base.Scanner` (`detect()` + `parse()` returning tools with `source="path:line"`), register it in `scan.SCANNERS`, add a fixture under `examples/repos/` and a job in `assurance.yml`. Add a server: one `CatalogEntry` with its source. Add a check: subclass `checks.base.Check`, register in `checks.ALL_CHECKS`.
+
+## Design rules (what you can rely on)
+
+- **Deterministic.** No LLM anywhere in the verdict. Same input, same output, reproducible by hand.
+- **Nothing executed, nothing sent.** Config files are read; MCP servers are never started; secret values are never read, only variable names; no network.
+- **Unknown is a result, not a silence.** Unrecognised servers and tools are `UNKNOWN`, score conservatively, and block a "promise kept".
+- **Honest standards mapping.** OWASP ASI controls are `maps`; a control borrowed from OWASP APTS (autonomous pentest platforms) or from EU AI Act art. 12 is `adapted`. No conformance is claimed that does not exist.
+- **Contracts are tested.** Exit codes, SARIF shape, Action YAML and every fixture's verdict run in CI on Python 3.10–3.12.
 
 ## Roadmap
 
-`AA-001 Blast Radius` ships today, computed from a hand-written manifest. A declared manifest is an audit artefact; it only becomes a *control* when the input is observed, not declared. That is where v0.2 goes:
-
 | Version | What | Why |
 |---|---|---|
-| **v0.2 — `scan` + AA-002** (done) | Observe `.mcp.json` and Claude Code `permissions`; verify against the declaration, including whether a human is still in the loop. Unknown sources are `UNKNOWN`, never guessed. | The manifest becomes an attestation, not a questionnaire. |
-| **v0.3 — `diff`** | Compare base vs PR: *"new MCP server `github` (write); blast radius MEDIUM → HIGH; promise broken: the manifest declares read-only"*. Gate on the delta. | The moment a PR widens what an agent can do — or breaks what it promised — the reviewer sees it. |
-| later | More observed sources (Cursor, VS Code, Gemini CLI, framework tool definitions); more questions on the same input (delegation budget, external-send allowlist). | Same input, more questions. |
+| v0.2 (done) | `scan` for MCP configs + Claude Code permissions; AA-002 declared vs observed | The manifest becomes an attestation |
+| v0.3 (done) | `diff` base vs head; Action `mode: diff` with PR comment; MCP server + hook; Cursor/Gemini/VS Code configs | The promise is enforced where the change happens |
+| next | **Capability card**: a single-file HTML "nutrition label" per agent, from the same JSON, shareable with auditors and customers | People outside the repo need to read the verdict too |
+| next | **Signed attestation** per release (`actions/attest` with an `agent-assurance/v1` predicate): declared, observed, verdict, commit | Evidence that survives the repo — what AI Act art. 12 and SOC 2 reviewers actually ask for |
+| next | **Policy file** (`agent-assurance.policy.yaml`): tune weights, bands and which classes break a promise, per org | Seniors want the model, not our defaults |
+| next | More observed sources: Codex `config.toml`, OpenAI Agents / LangChain / CrewAI serialized tool definitions | Business agents, not only coding agents |
 
-See [`docs/landscape.md`](docs/landscape.md) for what already exists around this and why this tool sits where it sits.
-
-Out of scope on purpose: no LLM in the verdict, no runtime interception, no auto-fixing permissions. Runtime governance is a different product; this tool checks what the repo says the agent can do.
+Runtime governance (intercepting calls, approvals, ledgers) is a different product and stays out of scope here: this tool checks what the repo says the agent can do, and holds it to its word.
 
 ## License
 
-Apache-2.0.
+Apache-2.0 © 2026 Kunko AI Labs
