@@ -101,14 +101,18 @@ class DeclaredVsObservedCheck(Check):
         #    A host rule that auto-approves a non-read tool removes that human.
         if declared.autonomy <= 2:
             for t in observed.tools:
-                if t.approval == "auto" and t.type in _BREAKING_ACCESS:
-                    note(
-                        broken,
-                        f"`{t.name}` runs **without human approval**, but declared autonomy is L{declared.autonomy}",
-                        t.source,
-                    )
-                    if t.system:
-                        broken_systems.add(t.system)
+                if t.approval != "auto" or t.type not in _BREAKING_ACCESS:
+                    continue
+                if t.scoped:
+                    note(review, f"`{t.name}` is auto-approved (scoped) under declared autonomy L{declared.autonomy}", t.source)
+                    continue
+                note(
+                    broken,
+                    f"`{t.name}` runs **without human approval**, but declared autonomy is L{declared.autonomy}",
+                    t.source,
+                )
+                if t.system:
+                    broken_systems.add(t.system)
 
         # 3. Undeclared data classes: sensitive ones break the promise; the
         #    rest are extra reach, reported only for systems not already broken.

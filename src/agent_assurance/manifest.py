@@ -53,6 +53,10 @@ class Tool(BaseModel):
     # "auto" (no approval needed), "ask" (approval required) or None (unknown /
     # not applicable). Autonomy is declared; this is what the config does.
     approval: str | None = None
+    # Observed rule narrowed to specific commands/paths (e.g. `Bash(npm test:*)`).
+    # A scoped grant is still the capability class, but a person chose the
+    # scope: it is not "the agent may run anything".
+    scoped: bool = False
 
 
 class DataSource(BaseModel):

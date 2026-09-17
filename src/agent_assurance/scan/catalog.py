@@ -193,6 +193,28 @@ CATALOG: tuple[CatalogEntry, ...] = (
         source="github.com/awslabs/mcp (aws-api-mcp-server: call_aws executes arbitrary AWS CLI)",
     ),
     CatalogEntry(
+        system="aws-docs",
+        capabilities=(Capability("search", R), Capability("read", R)),
+        packages=("aws-knowledge-mcp-server", "awslabs.aws-documentation-mcp-server"),
+        aliases=("aws-knowledge", "aws-docs", "aws-documentation"),
+        source="github.com/awslabs/mcp (aws-knowledge-mcp-server: documentation search, read-only)",
+    ),
+    CatalogEntry(
+        system="docs",
+        capabilities=(Capability("resolve-library", R), Capability("get-docs", R)),
+        packages=("@upstash/context7-mcp",),
+        aliases=("context7",),
+        source="github.com/upstash/context7 (resolve-library-id, get-library-docs: read-only)",
+    ),
+    CatalogEntry(
+        system="todoist",
+        capabilities=(Capability("read", R), Capability("write", W), Capability("delete", D)),
+        data=(DataClass.PII,),
+        packages=("@doist/todoist-mcp", "todoist-mcp"),
+        aliases=("todoist",),
+        source="github.com/Doist/todoist-mcp (add/update/complete/delete tasks)",
+    ),
+    CatalogEntry(
         system="notion",
         capabilities=(Capability("read", R), Capability("write", W)),
         data=(DataClass.INTERNAL,),

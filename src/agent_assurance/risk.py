@@ -36,9 +36,10 @@ DATA_WEIGHTS: dict[DataClass, int] = {
 
 PRODUCTION_WEIGHT = 5
 IRREVERSIBLE_WEIGHT = 5
-# A non-read tool the host will run without asking a human (e.g. Claude Code
-# `permissions.allow`). The capability was already scored; this is the cost of
-# removing the person from the loop for it.
+# A non-read, unscoped tool the host will run without asking a human (e.g.
+# Claude Code `allow: Bash(*)`). The capability was already scored; this is the
+# cost of removing the person from the loop for it. A scoped grant
+# (`Bash(npm test:*)`) is not penalised: a person chose that scope.
 AUTO_APPROVAL_WEIGHT = 2
 DELEGATION_WEIGHT = 3
 # Autonomy adds risk above "act with approval" (L2).
@@ -107,7 +108,7 @@ def assess(manifest: Manifest) -> RiskProfile:
         if tool.irreversible:
             p.add(IRREVERSIBLE_WEIGHT, f"tool '{tool.name}' is irreversible")
             p.irreversible_actions.append(tool.name)
-        if tool.approval == "auto" and tool.type is not ToolAccess.READ:
+        if tool.approval == "auto" and tool.type is not ToolAccess.READ and not tool.scoped:
             p.add(AUTO_APPROVAL_WEIGHT, f"tool '{tool.name}' runs without human approval")
             p.auto_approved.append(tool.name)
 

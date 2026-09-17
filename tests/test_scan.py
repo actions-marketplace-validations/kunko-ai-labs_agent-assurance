@@ -196,16 +196,37 @@ CC_KEPT = str(REPOS / "claude-code-approval-kept")
 CC_BROKEN = str(REPOS / "claude-code-approval-broken")
 
 
-def test_claude_settings_rules_become_tools_with_approval():
+def _grants(result):
+    """(class, system, approval, scoped) -> tool, for Claude Code observations."""
+    return {(t.type, t.system, t.approval, t.scoped): t for t in result.observed.tools}
+
+
+def test_claude_settings_rules_collapse_into_grants():
     result = scan_directory(CC_KEPT)
-    by_name = {t.name: t for t in result.observed.tools}
-    assert by_name["claude-code.Read"].type is ToolAccess.READ
-    assert by_name["claude-code.Read"].approval == "auto"
-    assert by_name["claude-code.Bash(npm test)"].type is ToolAccess.EXECUTE
-    assert by_name["claude-code.Bash(npm test)"].approval == "ask"
-    assert by_name["claude-code.Edit"].source == ".claude/settings.json:9"
+    g = _grants(result)
+    read = g[(ToolAccess.READ, "filesystem", "auto", False)]
+    assert "Read" in read.name and "Glob" in read.name
+    write = g[(ToolAccess.WRITE, "filesystem", "ask", False)]
+    assert write.source == ".claude/settings.json:9"
+    npm = g[(ToolAccess.EXECUTE, "shell", "ask", True)]
+    assert "Bash(npm test)" in npm.name
     # deny removes the capability entirely
-    assert "claude-code.WebFetch" not in by_name
+    assert not any(t.system == "web" for t in result.observed.tools)
+
+
+def test_scoped_read_only_bash_is_read_not_execute(tmp_path):
+    """`allow: Bash(git status:*)` is not 'the agent runs shell unattended'."""
+    d = tmp_path / ".claude"
+    d.mkdir()
+    (d / "settings.json").write_text(
+        '{"permissions": {"allow": ["Bash(git status:*)", "Bash(grep:*)", "Bash(ls:*)", "Bash(npm test:*)", "Bash(*)"]}}',
+        encoding="utf-8",
+    )
+    g = _grants(scan_directory(str(tmp_path)))
+    assert (ToolAccess.READ, "shell", "auto", True) in g  # git status, grep, ls
+    assert (ToolAccess.EXECUTE, "shell", "auto", True) in g  # npm test
+    assert (ToolAccess.EXECUTE, "shell", "auto", False) in g  # Bash(*)
+    assert len(g) == 3
 
 
 def test_claude_settings_deny_overrides_allow(tmp_path):
@@ -215,7 +236,7 @@ def test_claude_settings_deny_overrides_allow(tmp_path):
         '{"permissions": {"allow": ["Bash(*)", "Read"], "deny": ["Bash"]}}', encoding="utf-8"
     )
     result = scan_directory(str(tmp_path))
-    assert [t.name for t in result.observed.tools] == ["claude-code.Read"]
+    assert [(t.type, t.system) for t in result.observed.tools] == [(ToolAccess.READ, "filesystem")]
     assert "overridden by deny" in result.sources[0].note
 
 
@@ -237,9 +258,9 @@ def test_claude_settings_mcp_rule_uses_catalogue_or_unknown(tmp_path):
         '{"permissions": {"allow": ["mcp__github__create_issue", "mcp__acme"]}}', encoding="utf-8"
     )
     result = scan_directory(str(tmp_path))
-    by_name = {t.name: t for t in result.observed.tools}
-    assert by_name["claude-code.mcp__github__create_issue"].type is ToolAccess.WRITE
-    assert by_name["claude-code.mcp__acme"].type is ToolAccess.UNKNOWN
+    g = _grants(result)
+    assert (ToolAccess.WRITE, "github", "auto", True) in g
+    assert (ToolAccess.UNKNOWN, "acme", "auto", False) in g
     assert result.unknowns == ["mcp__acme"]
 
 
@@ -257,9 +278,23 @@ def test_auto_approval_breaks_an_l2_promise(tmp_path):
     aa2 = next(c for c in r["checks"] if c["id"] == "AA-002")
     assert any("Bash(*)" in m and "without human approval" in m for m in aa2["data"]["broken"])
     aa1 = next(c for c in r["checks"] if c["id"] == "AA-001")
-    assert "claude-code.Bash(*)" in aa1["data"]["auto_approved"]
+    assert any("Bash(*)" in name for name in aa1["data"]["auto_approved"])
     # No redundant REVIEW lines for systems already reported as broken.
     assert aa2["data"]["review"] == []
+
+
+def test_scoped_auto_approval_is_review_not_broken(tmp_path):
+    """Declared L2 + `allow: Bash(npm test:*)`: a person chose that scope."""
+    import shutil
+
+    shutil.copytree(CC_KEPT, tmp_path / "repo")
+    (tmp_path / "repo" / ".claude" / "settings.json").write_text(
+        '{"permissions": {"allow": ["Read", "Bash(npm test:*)"]}}', encoding="utf-8"
+    )
+    _, r = _scan_json(str(tmp_path / "repo"), tmp_path)
+    aa2 = next(c for c in r["checks"] if c["id"] == "AA-002")
+    assert aa2["status"] == "REVIEW"
+    assert aa2["data"]["broken"] == [] and any("scoped" in m for m in aa2["data"]["review"])
 
 
 def test_auto_approval_is_fine_when_autonomy_is_declared(tmp_path):
@@ -273,3 +308,13 @@ def test_auto_approval_is_fine_when_autonomy_is_declared(tmp_path):
     _, r = _scan_json(str(tmp_path / "repo"), tmp_path)
     aa2 = next(c for c in r["checks"] if c["id"] == "AA-002")
     assert not any("without human approval" in m for m in aa2["data"]["broken"])
+
+
+def test_same_server_in_several_hosts_counts_once(tmp_path):
+    payload = '{"mcpServers": {"github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"]}}}'
+    (tmp_path / ".mcp.json").write_text(payload, encoding="utf-8")
+    (tmp_path / ".cursor").mkdir()
+    (tmp_path / ".cursor" / "mcp.json").write_text(payload, encoding="utf-8")
+    result = scan_directory(str(tmp_path))
+    assert len([s for s in result.sources if s.supported]) == 2
+    assert len([t for t in result.observed.tools if t.system == "github"]) == 3  # read, write, push — once

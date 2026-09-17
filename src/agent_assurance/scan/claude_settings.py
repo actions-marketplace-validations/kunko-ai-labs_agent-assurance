@@ -15,8 +15,13 @@ So `allow` = the capability runs with no one watching (approval "auto"),
 `ask` = a person confirms, `deny` = the capability is removed. Autonomy, not
 access class, is what these files change.
 
+Rules are collapsed per capability class: ten `allow: Bash(...)` rules are one
+shell grant, not ten capabilities. A scoped rule (`Bash(npm test:*)`) keeps the
+class but is marked scoped; a scoped rule whose command is read-only
+(`Bash(git status:*)`, `Bash(grep:*)`) is a read, not an execute.
+
 Built-in tools map to classes as follows; anything else is UNKNOWN:
-  Bash                              -> execute (shell)
+  Bash                              -> execute (shell); read if only read-only commands
   Edit, Write, MultiEdit, NotebookEdit -> write (filesystem)
   Read, Glob, Grep, LS              -> read (filesystem)
   WebFetch, WebSearch               -> read (web)
@@ -50,9 +55,37 @@ _BUILTIN: dict[str, tuple[ToolAccess, str]] = {
     "WebSearch": (ToolAccess.READ, "web"),
     "Agent": (ToolAccess.EXECUTE, "subagents"),
     "Task": (ToolAccess.EXECUTE, "subagents"),
+    # Claude Code housekeeping tools: they read instructions or session state.
+    "Skill": (ToolAccess.READ, "claude-code"),
+    "SlashCommand": (ToolAccess.READ, "claude-code"),
+    "TodoWrite": (ToolAccess.READ, "claude-code"),
+    "TodoRead": (ToolAccess.READ, "claude-code"),
+    "BashOutput": (ToolAccess.READ, "shell"),
+    "KillShell": (ToolAccess.READ, "shell"),
+    "ExitPlanMode": (ToolAccess.READ, "claude-code"),
+}
+# First word of a scoped Bash rule that only reads. Deliberately short and
+# boring; anything not here is treated as execute.
+_READ_ONLY_COMMANDS = {
+    "ls", "cat", "head", "tail", "less", "grep", "rg", "find", "fd", "wc", "echo",
+    "pwd", "which", "type", "env", "printenv", "tree", "stat", "file", "diff",
+    "git status", "git diff", "git log", "git show", "git branch", "git blame",
+    "gh pr view", "gh pr list", "gh issue view", "gh issue list", "gh run list", "gh run view",
 }
 _RULE_RE = re.compile(r"^(?P<tool>[A-Za-z_][A-Za-z0-9_]*)(?:\((?P<spec>.*)\))?$")
 _MODE_TO_APPROVAL = {"allow": "auto", "ask": "ask"}
+
+
+def _bash_class(spec: str | None) -> tuple[ToolAccess, bool]:
+    """(class, scoped) for a Bash rule specifier."""
+    if not spec or spec.strip() in ("*", ":*"):
+        return ToolAccess.EXECUTE, False
+    cmd = spec.split(":", 1)[0].strip()
+    words = cmd.split()
+    for n in (2, 1):
+        if " ".join(words[:n]) in _READ_ONLY_COMMANDS:
+            return ToolAccess.READ, True
+    return ToolAccess.EXECUTE, True
 
 
 def _line_of(text: str, needle: str) -> int:
@@ -123,6 +156,9 @@ class ClaudeSettingsScanner(Scanner):
             if m:
                 notes.append(f"deny {rule}")
 
+        # Collapse rules per (class, system, approval, scoped): the report
+        # names the rules, the risk model counts the capability once.
+        grants: dict[tuple, dict] = {}
         for mode in ("ask", "allow"):
             for rule in perms.get(mode) or []:
                 m = _RULE_RE.match(str(rule))
@@ -132,22 +168,43 @@ class ClaudeSettingsScanner(Scanner):
                 if tool in denied_tools:
                     notes.append(f"{mode} {rule} overridden by deny")
                     continue
-                where = f"{rel_path}:{_line_of(text, str(rule))}"
-                cls = _classify(tool)
-                name = f"claude-code.{rule}"
-                if cls is None:
-                    obs.tools.append(Tool(name=name, type=ToolAccess.UNKNOWN, system=tool, source=where, approval=_MODE_TO_APPROVAL[mode]))
-                    obs.unknowns.append(str(rule))
-                    notes.append(f"{mode} {rule}: unknown tool -> UNKNOWN")
-                    continue
-                access, system = cls
-                if access is ToolAccess.UNKNOWN:
-                    obs.unknowns.append(str(rule))
-                obs.tools.append(
-                    Tool(name=name, type=access, system=system, source=where, approval=_MODE_TO_APPROVAL[mode])
+                line = _line_of(text, str(rule))
+                approval = _MODE_TO_APPROVAL[mode]
+                if tool == "Bash":
+                    access, scoped = _bash_class(spec)
+                    system = "shell"
+                else:
+                    cls = _classify(tool)
+                    if cls is None:
+                        obs.tools.append(Tool(name=f"claude-code.{rule}", type=ToolAccess.UNKNOWN, system=tool, source=f"{rel_path}:{line}", approval=approval))
+                        obs.unknowns.append(str(rule))
+                        notes.append(f"{mode} {rule}: unknown tool -> UNKNOWN")
+                        continue
+                    access, system = cls
+                    # A specifier, or a single MCP tool (mcp__srv__tool) rather
+                    # than a whole server (mcp__srv), narrows the grant.
+                    scoped = bool(spec and spec != "*") or (tool.startswith("mcp__") and tool.count("__") >= 2)
+                    if access is ToolAccess.UNKNOWN:
+                        obs.unknowns.append(str(rule))
+                key = (access, system, approval, scoped)
+                g = grants.setdefault(key, {"rules": [], "line": line})
+                g["rules"].append(str(rule))
+                g["line"] = min(g["line"], line)
+
+        for (access, system, approval, scoped), g in grants.items():
+            rules = g["rules"]
+            shown = ", ".join(rules[:4]) + (f", +{len(rules) - 4} more" if len(rules) > 4 else "")
+            obs.tools.append(
+                Tool(
+                    name=f"claude-code.{system}[{shown}]",
+                    type=access,
+                    system=system,
+                    source=f"{rel_path}:{g['line']}",
+                    approval=approval,
+                    scoped=scoped,
                 )
-                scoped = f" (scoped: {spec})" if spec and spec != "*" else ""
-                notes.append(f"{mode} {tool}{scoped} -> {access.value}")
+            )
+            notes.append(f"{'allow' if approval == 'auto' else 'ask'} {len(rules)} rule(s) -> {access.value} {system}{' (scoped)' if scoped else ''}")
 
         default_mode = perms.get("defaultMode")
         if default_mode == "bypassPermissions":

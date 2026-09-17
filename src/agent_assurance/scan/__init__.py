@@ -41,9 +41,16 @@ class ScanResult:
 def _merge(observations: list[Observation], declared: Manifest | None, root: str) -> Manifest:
     tools: list[Tool] = []
     data: list[DataSource] = []
+    seen_tools: set[tuple] = set()
     seen_data: set[tuple[str, str]] = set()
     for obs in observations:
-        tools.extend(obs.tools)
+        for t in obs.tools:
+            # The same server declared for several hosts (.mcp.json and
+            # .cursor/mcp.json, say) is one capability, not two.
+            key = (t.name, t.type.value, t.system, t.approval, t.scoped)
+            if key not in seen_tools:
+                seen_tools.add(key)
+                tools.append(t)
         for d in obs.data:
             key = (d.type.value, ",".join(sorted(d.systems)))
             if key not in seen_data:
