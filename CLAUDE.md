@@ -2,7 +2,9 @@
 
 ## Qué es (y qué no)
 
-Linter de **lo que el repo dice que un agente de IA puede hacer**: lee un manifiesto (`agent-assurance.yaml`, y desde v0.2 la configuración real del repo), calcula un riesgo transparente y lo enseña en el PR (markdown, JSON, SARIF) con exit code que bloquea.
+**Declarado vs observado.** El manifiesto (`agent-assurance.yaml`) es la **promesa** de lo que un agente de IA puede hacer; `scan` **observa** lo que la configuración del repo concede de verdad (`.mcp.json` hoy; más fuentes después) y AA-002 falla el PR si la promesa se rompe, señalando fichero:línea. AA-001 mide el radio de impacto. Todo transparente, en markdown/JSON/SARIF, con exit code que bloquea.
+
+Por qué esto y no "diff de permisos": ya existe ×5 sin tracción (`docs/landscape.md`). Nadie verifica promesas ni mapea a OWASP.
 
 No es: un motor en runtime, un interceptor de tool calls, un ledger, un sistema de aprobaciones. Eso es otro producto (carril empresa de Kunko AI Labs); aquí no entra código de eso.
 
@@ -12,14 +14,17 @@ No es: un motor en runtime, un interceptor de tool calls, un ledger, un sistema 
 - **Riesgo reproducible a mano**: cada punto sale de `risk.py` con su motivo. Nunca un LLM en el veredicto.
 - **SARIF**: apunta al fichero real, con región; PASS sale como `kind: pass` (sin alerta).
 - **Estándares**: mapeo a OWASP ASI; lo que viene de APTS se etiqueta `(adapted)`. No se reclama conformidad que no existe.
-- **Lo no soportado es `UNKNOWN`**, nunca inferido.
+- **Lo no soportado es `UNKNOWN`**, nunca inferido. Un `UNKNOWN` nunca da PASS silencioso (AA-001 ≥ REVIEW; AA-002 "not verifiable").
+- **El escáner no ejecuta nada**: ni servidores MCP ni código del repo; nunca lee el valor de un secreto, solo el nombre de la variable.
+- **Catálogo de servidores MCP** (`scan/catalog.py`) con fuente por entrada; añadir un servidor = una entrada + su fuente.
 
 ## Cómo se trabaja
 
 - Entorno: `.venv` con `pip install -e ".[dev]"`. Antes de commitear: `ruff check src tests && pytest -q`.
 - El CI de dogfood (`assurance.yml`) es una **alarma**: cada job afirma que la Action pasa lo que debe y bloquea lo que debe. No añadir `continue-on-error` sin un paso que afirme el resultado esperado.
 - Una unidad shippable por semana con demo de 30 s. Si una feature no cabe en una demo, está mal cortada.
-- Ejemplos en `examples/` cubren las cuatro bandas (safe=LOW, medium=MEDIUM, high=HIGH, dangerous=CRITICAL); un check nuevo añade su ejemplo.
+- Ejemplos en `examples/` cubren las cuatro bandas (safe=LOW, medium=MEDIUM, high=HIGH, dangerous=CRITICAL); `examples/repos/` cubre promesa cumplida / rota / no verificable. Un check o un scanner nuevo añade su fixture y su job en `assurance.yml`.
+- Antes de una feature nueva: pasada corta de mercado con fuente y fecha (`docs/landscape.md`), y proponer la versión que nadie ocupa.
 - Commits en inglés, imperativo, prefijo `feat:|fix:|ci:|docs:|test:`.
 
 ## Roadmap vigente

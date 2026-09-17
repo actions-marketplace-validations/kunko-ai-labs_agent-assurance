@@ -56,6 +56,9 @@ def to_dict(report: AssuranceReport, manifest_path: str = _DEFAULT_MANIFEST) -> 
                     },
                 }
             )
+        # A check that knows where the finding lives (scan) anchors there;
+        # otherwise the manifest as a whole.
+        anchors = [(loc.path, loc.line) for loc in r.locations] or [(manifest_path, _ANCHOR_LINE)]
         results.append(
             {
                 "ruleId": r.check_id,
@@ -67,10 +70,11 @@ def to_dict(report: AssuranceReport, manifest_path: str = _DEFAULT_MANIFEST) -> 
                 "locations": [
                     {
                         "physicalLocation": {
-                            "artifactLocation": {"uri": manifest_path},
-                            "region": {"startLine": _ANCHOR_LINE},
+                            "artifactLocation": {"uri": path},
+                            "region": {"startLine": line},
                         }
                     }
+                    for path, line in anchors
                 ],
                 # Stable across runs so code scanning tracks one finding over
                 # time instead of opening a new alert on every push.

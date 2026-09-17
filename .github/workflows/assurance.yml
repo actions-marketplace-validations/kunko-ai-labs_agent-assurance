@@ -85,3 +85,46 @@ jobs:
         with:
           name: aa-sarif
           path: aa.sarif
+
+  scan-promise-kept:
+    name: scan — promise kept (must PASS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Agent Assurance (scan)
+        uses: ./
+        with:
+          mode: scan
+          directory: examples/repos/mcp-promise-kept
+          manifest: examples/repos/mcp-promise-kept/agent-assurance.yaml
+          fail-on: review   # a kept promise has nothing to review either
+
+  scan-promise-broken:
+    name: scan — promise broken (must BLOCK)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Agent Assurance (scan, expected to fail)
+        id: gate
+        continue-on-error: true
+        uses: ./
+        with:
+          mode: scan
+          directory: examples/repos/mcp-promise-broken
+          manifest: examples/repos/mcp-promise-broken/agent-assurance.yaml
+          sarif: aa-scan.sarif
+      - name: Assert the gate tripped
+        if: steps.gate.outcome != 'failure'
+        run: |
+          echo "::error::scan did NOT block a broken promise (outcome=${{ steps.gate.outcome }})"
+          exit 1
+      - name: Assert SARIF anchors AA-002 at .mcp.json lines
+        run: |
+          python3 - <<'PY'
+          import json
+          s = json.load(open("aa-scan.sarif"))
+          r = next(x for x in s["runs"][0]["results"] if x["ruleId"] == "AA-002")
+          locs = [(l["physicalLocation"]["artifactLocation"]["uri"], l["physicalLocation"]["region"]["startLine"]) for l in r["locations"]]
+          assert r["kind"] == "fail" and locs == [(".mcp.json", 11), (".mcp.json", 16)], locs
+          print("SARIF ok:", locs)
+          PY

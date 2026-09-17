@@ -15,7 +15,7 @@ from typing import ClassVar
 
 from .. import risk
 from ..manifest import Manifest
-from .base import Check, CheckResult, StandardRef, Status
+from .base import Check, CheckResult, Context, StandardRef, Status
 
 # Bands that warrant a gate. LOW/MEDIUM pass; HIGH -> review; CRITICAL -> fail.
 REVIEW_BANDS = {"HIGH"}
@@ -31,12 +31,14 @@ class BlastRadiusCheck(Check):
         StandardRef("OWASP-APTS", "APTS-SC-020", "adapted"),
     ]
 
-    def run(self, manifest: Manifest) -> CheckResult:
+    def run(self, manifest: Manifest, ctx: Context) -> CheckResult:
         p = risk.assess(manifest)
 
         if p.band in FAIL_BANDS:
             status = Status.FAIL
-        elif p.band in REVIEW_BANDS:
+        elif p.band in REVIEW_BANDS or p.unknown_capabilities:
+            # An unclassified capability means the radius is not fully known;
+            # that is never a silent PASS.
             status = Status.REVIEW
         else:
             status = Status.PASS
@@ -56,10 +58,17 @@ class BlastRadiusCheck(Check):
             details.append(
                 "Irreversible actions: " + ", ".join(p.irreversible_actions)
             )
+        if p.unknown_capabilities:
+            details.append(
+                "Unknown capabilities (scored as write): "
+                + ", ".join(p.unknown_capabilities)
+            )
         details.append(f"Autonomy: L{manifest.autonomy}")
         details.append(f"Risk score: {p.score} ({p.band})")
 
         summary = f"Blast radius {p.band} (score {p.score})"
+        if p.unknown_capabilities:
+            summary += f" — {len(p.unknown_capabilities)} unknown capabilit{'y' if len(p.unknown_capabilities) == 1 else 'ies'}"
 
         return CheckResult(
             check_id=self.check_id,
@@ -76,6 +85,7 @@ class BlastRadiusCheck(Check):
                 "write_capabilities": p.write_capabilities,
                 "external_side_effects": p.external_side_effects,
                 "irreversible_actions": p.irreversible_actions,
+                "unknown_capabilities": p.unknown_capabilities,
                 "factors": [
                     {"points": f.points, "reason": f.reason} for f in p.factors
                 ],

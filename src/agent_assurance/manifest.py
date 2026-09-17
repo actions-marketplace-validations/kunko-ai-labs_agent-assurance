@@ -22,6 +22,10 @@ class ToolAccess(str, Enum):
     EXECUTE = "execute"
     EXTERNAL_SEND = "external_send"
     FINANCIAL = "financial"
+    # Observed but not understood (e.g. an MCP server that is not in the
+    # catalogue). Never silently treated as safe: it scores conservatively and
+    # blocks a "promise kept" verdict.
+    UNKNOWN = "unknown"
 
 
 class DataClass(str, Enum):
@@ -42,11 +46,15 @@ class Tool(BaseModel):
     production: bool = False
     # Marks the action as irreversible (raises risk, cannot be rolled back).
     irreversible: bool = False
+    # Provenance for observed tools: "path:line" of the config that grants it.
+    # Empty for declared (hand-written) tools.
+    source: str | None = None
 
 
 class DataSource(BaseModel):
     type: DataClass = DataClass.INTERNAL
     systems: list[str] = Field(default_factory=list)
+    source: str | None = None
 
 
 class ModelSpec(BaseModel):

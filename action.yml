@@ -6,8 +6,16 @@ branding:
   color: "red"
 
 inputs:
+  mode:
+    description: "'check' runs the checks on the manifest alone; 'scan' observes the repo's agent configuration (.mcp.json, ...) and verifies it against the manifest if one exists"
+    required: false
+    default: "check"
+  directory:
+    description: "Directory to scan (mode: scan)"
+    required: false
+    default: "."
   manifest:
-    description: "Path to the agent-assurance.yaml manifest"
+    description: "Path to the agent-assurance.yaml manifest (the promise). In scan mode it is optional: <directory>/agent-assurance.yaml is picked up automatically"
     required: false
     default: "agent-assurance.yaml"
   check:
@@ -39,12 +47,24 @@ runs:
       shell: bash
       run: pip install "${{ github.action_path }}"
 
+    - name: Resolve command
+      shell: bash
+      # One place decides the CLI invocation, so the report and SARIF steps agree.
+      run: |
+        if [ "${{ inputs.mode }}" = "scan" ]; then
+          cmd=(agent-assurance scan "${{ inputs.directory }}" --check "${{ inputs.check }}")
+          if [ -f "${{ inputs.manifest }}" ]; then cmd+=(--manifest "${{ inputs.manifest }}"); fi
+        else
+          cmd=(agent-assurance check "${{ inputs.check }}" "${{ inputs.manifest }}")
+        fi
+        printf '%q ' "${cmd[@]}" > .aa-cmd
+        echo "command: $(cat .aa-cmd)"
+
     - name: Run Agent Assurance (markdown -> job summary)
       shell: bash
       run: |
         set +e
-        agent-assurance check "${{ inputs.check }}" "${{ inputs.manifest }}" \
-          --format md --output aa-report.md --fail-on "${{ inputs.fail-on }}"
+        eval "$(cat .aa-cmd)" --format md --output aa-report.md --fail-on "${{ inputs.fail-on }}"
         code=$?
         set -e
 
@@ -65,8 +85,7 @@ runs:
       shell: bash
       # The verdict was already recorded above; here only exit 2 (no report) matters.
       run: |
-        agent-assurance check "${{ inputs.check }}" "${{ inputs.manifest }}" \
-          --format sarif --output "${{ inputs.sarif }}" || [ $? -ne 2 ]
+        eval "$(cat .aa-cmd)" --format sarif --output "${{ inputs.sarif }}" || [ $? -ne 2 ]
 
     - name: Upload SARIF to code scanning (optional)
       if: ${{ inputs.sarif != '' && inputs.upload-sarif == 'true' }}

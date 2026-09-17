@@ -44,6 +44,9 @@ def to_markdown(report: AssuranceReport) -> str:
     lines.append(f"**Agent:** `{m.agent.name}` v{m.agent.version}")
     fw = m.framework.name or "unknown"
     lines.append(f"**Framework:** {fw} · **Autonomy:** L{m.autonomy}")
+    if report.sources:
+        mode = "declared manifest verified against observed configuration" if report.declared else "observed configuration only (no manifest declared)"
+        lines.append(f"**Mode:** scan — {mode}")
     lines.append("")
 
     for r in report.results:
@@ -57,6 +60,18 @@ def to_markdown(report: AssuranceReport) -> str:
         if std:
             lines.append("")
             lines.append(f"_{std}_")
+        lines.append("")
+
+    if report.sources:
+        lines.append("<details><summary>Sources scanned</summary>")
+        lines.append("")
+        lines.append("| File | Kind | Status | Notes |")
+        lines.append("|---|---|---|---|")
+        for src in report.sources:
+            status = "parsed" if src.supported else "detected, not supported"
+            lines.append(f"| `{src.path}` | {src.kind} | {status} | {src.note} |")
+        lines.append("")
+        lines.append("</details>")
         lines.append("")
 
     if report.verdict is not Status.PASS:

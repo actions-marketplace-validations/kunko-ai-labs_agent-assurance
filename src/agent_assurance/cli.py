@@ -3,6 +3,7 @@
 Commands:
   agent-assurance validate <manifest>
   agent-assurance check [blast-radius|all] <manifest> [--format md|json|sarif] [--output FILE]
+  agent-assurance scan <dir> [--manifest FILE] [--format ...] [--output FILE]
 
 Exit codes: 0 = pass/review, 1 = FAIL, 2 = usage/manifest error.
 Use --fail-on {fail,review} to control what gates the pipeline.
@@ -11,12 +12,14 @@ Use --fail-on {fail,review} to control what gates the pipeline.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from . import __version__, engine, reports
 from .checks import CHECK_ALIASES
-from .checks.base import Status
+from .checks.base import Context, Status
 from .manifest import Manifest, ManifestError
+from .scan import scan_directory
 
 # Every renderer takes (report, manifest_path). Only SARIF needs the path today
 # (code scanning must resolve the finding to a real file in the repo), but the
@@ -43,6 +46,26 @@ def _load(path: str) -> Manifest | None:
     except ManifestError as exc:
         print(f"error: {exc}", file=sys.stderr)
     return None
+
+
+def _emit(report: engine.AssuranceReport, args: argparse.Namespace, anchor: str) -> None:
+    output = _FORMATS[args.format](report, anchor)
+    if args.output:
+        with open(args.output, "w", encoding="utf-8") as fh:
+            fh.write(output)
+        print(f"wrote {args.format} report to {args.output}", file=sys.stderr)
+    else:
+        print(output)
+
+
+def _gate(report: engine.AssuranceReport, fail_on: str) -> int:
+    gate_fail = report.verdict is Status.FAIL
+    gate_review = report.verdict in (Status.FAIL, Status.REVIEW)
+    if fail_on == "review" and gate_review:
+        return EXIT_GATE
+    if fail_on == "fail" and gate_fail:
+        return EXIT_GATE
+    return EXIT_OK
 
 
 def _resolve_checks(name: str) -> list[str] | None:
@@ -73,22 +96,46 @@ def cmd_check(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_USAGE
 
-    renderer = _FORMATS[args.format]
-    output = renderer(report, args.manifest)
-    if args.output:
-        with open(args.output, "w", encoding="utf-8") as fh:
-            fh.write(output)
-        print(f"wrote {args.format} report to {args.output}", file=sys.stderr)
-    else:
-        print(output)
+    _emit(report, args, args.manifest)
+    return _gate(report, args.fail_on)
 
-    gate_fail = report.verdict is Status.FAIL
-    gate_review = report.verdict in (Status.FAIL, Status.REVIEW)
-    if args.fail_on == "review" and gate_review:
-        return EXIT_GATE
-    if args.fail_on == "fail" and gate_fail:
-        return EXIT_GATE
-    return EXIT_OK
+
+def cmd_scan(args: argparse.Namespace) -> int:
+    root = args.directory
+    if not os.path.isdir(root):
+        print(f"error: not a directory: {root}", file=sys.stderr)
+        return EXIT_USAGE
+
+    # The declaration (the promise) is optional. Default: <dir>/agent-assurance.yaml.
+    declared = None
+    manifest_path = args.manifest or os.path.join(root, "agent-assurance.yaml")
+    if args.manifest or os.path.isfile(manifest_path):
+        declared = _load(manifest_path)
+        if declared is None:
+            return EXIT_USAGE
+
+    result = scan_directory(root, declared)
+    if not result.found_anything and declared is None:
+        print(
+            "error: nothing to scan: no supported agent configuration found "
+            f"in {root} and no manifest declared",
+            file=sys.stderr,
+        )
+        for src in result.sources:
+            print(f"  detected but not supported: {src.path} ({src.kind})", file=sys.stderr)
+        return EXIT_USAGE
+
+    ctx = Context(declared=declared, observed=result.observed)
+    try:
+        report = engine.run(result.observed, _resolve_checks(args.check), ctx, result.sources)
+    except KeyError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+
+    # SARIF anchor: the first scanned file, relative to the scanned directory.
+    anchor = next((s.path for s in result.sources if s.supported), manifest_path)
+    _emit(report, args, anchor)
+    return _gate(report, args.fail_on)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -115,6 +162,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="exit 1 on FAIL (default) or on REVIEW too",
     )
     pc.set_defaults(func=cmd_check)
+
+    ps = sub.add_parser(
+        "scan",
+        help="observe what the repo's agent configuration grants and verify it "
+        "against the declared manifest, if any",
+    )
+    ps.add_argument("directory", nargs="?", default=".")
+    ps.add_argument("--manifest", "-m", default=None, help="declared manifest (the promise)")
+    ps.add_argument("--check", default="all", help="check id/alias or 'all'")
+    ps.add_argument("--format", choices=list(_FORMATS.keys()), default="md")
+    ps.add_argument("--output", "-o", default=None, help="write report to a file")
+    ps.add_argument("--fail-on", choices=["fail", "review"], default="fail")
+    ps.set_defaults(func=cmd_scan)
     return p
 
 

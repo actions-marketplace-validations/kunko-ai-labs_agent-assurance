@@ -1,48 +1,92 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/kunko-ai/agent-assurance/schema/agent-assurance.schema.json",
+  "$id": "https://github.com/kunko-ai-labs/agent-assurance/schema/agent-assurance.schema.json",
   "title": "Agent Assurance Manifest",
   "description": "agent-assurance/v1 — the common representation every assurance check consumes.",
   "type": "object",
-  "required": ["apiVersion", "agent"],
+  "required": [
+    "apiVersion",
+    "agent"
+  ],
   "properties": {
-    "apiVersion": { "const": "agent-assurance/v1" },
+    "apiVersion": {
+      "const": "agent-assurance/v1"
+    },
     "agent": {
       "type": "object",
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "properties": {
-        "name": { "type": "string" },
-        "version": { "type": "string", "default": "0.0.0" }
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string",
+          "default": "0.0.0"
+        }
       }
     },
     "framework": {
       "type": "object",
       "properties": {
-        "name": { "type": "string" },
-        "version": { "type": "string" }
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
       }
     },
     "model": {
       "type": "object",
       "properties": {
-        "provider": { "type": "string" },
-        "name": { "type": "string" }
+        "provider": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
       }
     },
     "tools": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["name"],
+        "required": [
+          "name"
+        ],
         "properties": {
-          "name": { "type": "string" },
+          "name": {
+            "type": "string"
+          },
           "type": {
-            "enum": ["read", "write", "delete", "execute", "external_send", "financial"],
+            "enum": [
+              "read",
+              "write",
+              "delete",
+              "execute",
+              "external_send",
+              "financial",
+              "unknown"
+            ],
             "default": "read"
           },
-          "system": { "type": "string" },
-          "production": { "type": "boolean", "default": false },
-          "irreversible": { "type": "boolean", "default": false }
+          "system": {
+            "type": "string"
+          },
+          "production": {
+            "type": "boolean",
+            "default": false
+          },
+          "irreversible": {
+            "type": "boolean",
+            "default": false
+          },
+          "source": {
+            "type": "string",
+            "description": "Provenance for observed tools: path:line of the config that grants it. Empty when declared by hand."
+          }
         }
       }
     },
@@ -52,21 +96,55 @@
         "type": "object",
         "properties": {
           "type": {
-            "enum": ["public", "internal", "pii", "financial", "credential", "health"],
+            "enum": [
+              "public",
+              "internal",
+              "pii",
+              "financial",
+              "credential",
+              "health"
+            ],
             "default": "internal"
           },
-          "systems": { "type": "array", "items": { "type": "string" } }
+          "systems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "source": {
+            "type": "string",
+            "description": "Provenance for observed data access (path:line)."
+          }
         }
       }
     },
-    "autonomy": { "type": "integer", "minimum": 0, "maximum": 5, "default": 1 },
+    "autonomy": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5,
+      "default": 1
+    },
     "delegation": {
       "type": "object",
       "properties": {
-        "enabled": { "type": "boolean", "default": false },
-        "subagents": { "type": "array", "items": { "type": "string" } }
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "subagents": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       }
     },
-    "policies": { "type": "array", "items": { "type": "string" } }
+    "policies": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
   }
 }

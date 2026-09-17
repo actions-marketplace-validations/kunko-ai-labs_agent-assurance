@@ -32,8 +32,13 @@ def to_dict(report: AssuranceReport) -> dict:
                     for s in r.standards
                 ],
                 "data": r.data,
+                "locations": [{"path": loc.path, "line": loc.line} for loc in r.locations],
             }
             for r in report.results
+        ],
+        "sources": [
+            {"path": s.path, "kind": s.kind, "supported": s.supported, "note": s.note}
+            for s in report.sources
         ],
     }
 

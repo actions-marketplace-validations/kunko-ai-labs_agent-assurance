@@ -19,6 +19,10 @@ TOOL_WEIGHTS: dict[ToolAccess, int] = {
     ToolAccess.EXTERNAL_SEND: 3,
     ToolAccess.DELETE: 5,
     ToolAccess.FINANCIAL: 5,
+    # Unknown scores like a write: we refuse to assume an unrecognised server
+    # is harmless, but we do not inflate it to "delete" either. The report
+    # always names what was unknown so a human can classify it.
+    ToolAccess.UNKNOWN: 3,
 }
 
 DATA_WEIGHTS: dict[DataClass, int] = {
@@ -62,6 +66,7 @@ class RiskProfile:
     write_capabilities: list[str] = field(default_factory=list)
     external_side_effects: list[str] = field(default_factory=list)
     irreversible_actions: list[str] = field(default_factory=list)
+    unknown_capabilities: list[str] = field(default_factory=list)
 
     @property
     def band(self) -> str:
@@ -90,6 +95,8 @@ def assess(manifest: Manifest) -> RiskProfile:
             p.write_capabilities.append(tool.name)
         if tool.type == ToolAccess.EXTERNAL_SEND:
             p.external_side_effects.append(tool.name)
+        if tool.type == ToolAccess.UNKNOWN:
+            p.unknown_capabilities.append(tool.name)
         if tool.production:
             p.add(PRODUCTION_WEIGHT, f"tool '{tool.name}' acts on production")
         if tool.irreversible:

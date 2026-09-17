@@ -1,0 +1,24 @@
+apiVersion: agent-assurance/v1
+
+# The promise: a read-only analytics helper. It may query the warehouse and
+# fetch public web pages. Nothing else.
+agent:
+  name: analytics-helper
+  version: 1.0.0
+
+framework:
+  name: claude-code
+
+tools:
+  - name: postgres.query
+    type: read
+    system: postgres
+  - name: web.fetch
+    type: read
+    system: web
+
+data:
+  - type: internal
+    systems: [postgres]
+
+autonomy: 2
