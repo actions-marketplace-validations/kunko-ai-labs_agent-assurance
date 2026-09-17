@@ -15,7 +15,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 def test_action_yml_is_valid():
     action = yaml.safe_load((ROOT / "action.yml").read_text(encoding="utf-8"))
     assert action["runs"]["using"] == "composite"
-    for inp in ("mode", "directory", "manifest", "check", "fail-on", "sarif", "upload-sarif", "comment", "fail-on-delta", "attest"):
+    for inp in ("mode", "directory", "manifest", "check", "fail-on", "sarif", "upload-sarif", "comment", "fail-on-delta", "attest", "card"):
         assert inp in action["inputs"], inp
     names = [s.get("name", "") for s in action["runs"]["steps"]]
     assert all(isinstance(n, str) for n in names)

@@ -225,3 +225,33 @@ def to_dict(d: DiffReport) -> dict:
         "base": report_dict(d.base),
         "head": report_dict(d.head),
     }
+
+
+def to_html(d: DiffReport) -> str:
+    """Capability card of the head side, with the delta on top."""
+    from html import escape as _e
+
+    from .reports.html import _md_inline
+    from .reports.html import to_html as card
+
+    head = card(d.head)
+    if d.promise_regressed:
+        title, color = "PROMISE BROKEN BY THIS CHANGE", "#cf222e"
+    elif d.promise_stretched or d.band_up:
+        title, color = "REACH GREW — REVIEW", "#9a6700"
+    elif not d.has_delta:
+        title, color = "NO CHANGE TO WHAT THE AGENT CAN DO", "#1a7f37"
+    else:
+        title, color = "REACH CHANGED, PROMISE KEPT", "#1a7f37"
+    parts = [f'<section style="border-left:4px solid {color};padding:8px 14px;margin-bottom:20px;background:#f6f8fa">']
+    parts.append(f'<div style="font-weight:700;color:{color}">{title}</div>')
+    parts.append(f'<div class="muted">Blast radius {_e(d.band_from)} → <strong>{_e(d.band_to)}</strong>'
+                 + (f' · Promise {_e(d.promise_from.value if d.promise_from else "none")} → <strong>{_e(d.promise_to.value)}</strong>' if d.promise_to else "") + "</div>")
+    if d.newly_broken:
+        parts.append("<div class=\"k\">Newly broken</div><ul>" + "".join(f"<li>{_md_inline(x)}</li>" for x in d.newly_broken) + "</ul>")
+    if d.added:
+        parts.append("<div class=\"k\">Added</div><ul>" + "".join(f"<li>{_md_inline(_describe(t))}</li>" for t in d.added) + "</ul>")
+    if d.removed:
+        parts.append("<div class=\"k\">Removed</div><ul>" + "".join(f"<li>{_md_inline(_describe(t))}</li>" for t in d.removed) + "</ul>")
+    parts.append("</section>")
+    return head.replace("<main>", "<main>" + "".join(parts), 1)

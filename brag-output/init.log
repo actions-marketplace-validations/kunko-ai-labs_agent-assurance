@@ -1,0 +1,140 @@
+Created composition/
+  AGENTS.md
+  CLAUDE.md
+  hyperframes.json
+  index.html
+  meta.json
+  package.json
+
+Checking AI coding skills against GitHub...
+
+Installing HyperFrames skills...
+
+
+│
+●   claude-code_2-1-274_agent  Agent detected — installing non-interactively
+[?25l│
+◇  Source: https://github.com/heygen-com/hyperframes.git
+[?25h[?25l│
+◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◇  Repository cloned
+[?25h[?25l│
+[1G[J◇  Found 26 skills
+[?25h│
+●  Selected 9 skills: hyperframes, hyperframes-animation, hyperframes-audio, hyperframes-cli, hyperframes-core, hyperframes-creative, hyperframes-keyframes, hyperframes-registry, media-use
+
+│
+◇  Installation Summary ───────────────────╮
+│                                          │
+│                                          │
+│  Core Skills                             │
+│                                          │
+│  ~/.agents/skills/hyperframes            │
+│    copy → Claude Code, Universal         │
+│                                          │
+│  ~/.agents/skills/hyperframes-animation  │
+│    copy → Claude Code, Universal         │
+│                                          │
+│  ~/.agents/skills/hyperframes-audio      │
+│    copy → Claude Code, Universal         │
+│                                          │
+│  ~/.agents/skills/hyperframes-cli        │
+│    copy → Claude Code, Universal         │
+│                                          │
+│  ~/.agents/skills/hyperframes-core       │
+│    copy → Claude Code, Universal         │
+│                                          │
+│  ~/.agents/skills/hyperframes-creative   │
+│    copy → Claude Code, Universal         │
+│                                          │
+│  ~/.agents/skills/hyperframes-keyframes  │
+│    copy → Claude Code, Universal         │
+│                                          │
+│  ~/.agents/skills/hyperframes-registry   │
+│    copy → Claude Code, Universal         │
+│                                          │
+│  ~/.agents/skills/media-use              │
+│    copy → Claude Code, Universal         │
+│                                          │
+├──────────────────────────────────────────╯
+│
+◇  Security Risk Assessments ───────────────────────────────────────────╮
+│                                                                       │
+│                         Gen               Socket            Snyk      │
+│  hyperframes            Safe              0 alerts          Med Risk  │
+│  hyperframes-animation  Med Risk          0 alerts          Low Risk  │
+│  hyperframes-audio      Med Risk          0 alerts          Low Risk  │
+│  hyperframes-cli        Med Risk          0 alerts          Med Risk  │
+│  hyperframes-core       Safe              0 alerts          Low Risk  │
+│  hyperframes-creative   Med Risk          0 alerts          Low Risk  │
+│  hyperframes-keyframes  Safe              0 alerts          Low Risk  │
+│  hyperframes-registry   Safe              0 alerts          Low Risk  │
+│  media-use              Safe              2 alerts          Med Risk  │
+│                                                                       │
+│  Details: https://skills.sh/heygen-com/hyperframes                    │
+│                                                                       │
+├───────────────────────────────────────────────────────────────────────╯
+[?25l│
+[1G[J◒  Installing skills…[1G[J◇  Installation complete
+[?25h
+│
+◇  Installed 9 skills ─────────────────────────╮
+│                                              │
+│                                              │
+│  Core Skills                                 │
+│  ✓ hyperframes (copied)                      │
+│    → ~/.claude/skills/hyperframes            │
+│    → ~/.agents/skills/hyperframes            │
+│  ✓ hyperframes-animation (copied)            │
+│    → ~/.claude/skills/hyperframes-animation  │
+│    → ~/.agents/skills/hyperframes-animation  │
+│  ✓ hyperframes-audio (copied)                │
+│    → ~/.claude/skills/hyperframes-audio      │
+│    → ~/.agents/skills/hyperframes-audio      │
+│  ✓ hyperframes-cli (copied)                  │
+│    → ~/.claude/skills/hyperframes-cli        │
+│    → ~/.agents/skills/hyperframes-cli        │
+│  ✓ hyperframes-core (copied)                 │
+│    → ~/.claude/skills/hyperframes-core       │
+│    → ~/.agents/skills/hyperframes-core       │
+│  ✓ hyperframes-creative (copied)             │
+│    → ~/.claude/skills/hyperframes-creative   │
+│    → ~/.agents/skills/hyperframes-creative   │
+│  ✓ hyperframes-keyframes (copied)            │
+│    → ~/.claude/skills/hyperframes-keyframes  │
+│    → ~/.agents/skills/hyperframes-keyframes  │
+│  ✓ hyperframes-registry (copied)             │
+│    → ~/.claude/skills/hyperframes-registry   │
+│    → ~/.agents/skills/hyperframes-registry   │
+│  ✓ media-use (copied)                        │
+│    → ~/.claude/skills/media-use              │
+│    → ~/.agents/skills/media-use              │
+│                                              │
+├──────────────────────────────────────────────╯
+
+│
+└  Done!  Review skills before use; they run with full agent permissions.
+
+Linked skills into 9 other agent directories.
+Workflow skills not installed here are added on demand, when first used.
+
+Get started:
+
+  1. Restart your AI agent (new session) so it loads the skills.
+
+  2. Open this project with your AI coding agent:
+     cd composition then start Claude Code, Cursor, or your preferred agent
+
+  3. Try a starter prompt:
+     "Using /hyperframes, create a 15-second intro about [your topic]"
+     More patterns: hyperframes.heygen.com/prompting/overview
+
+  4. Preview in the browser:
+     cd composition && npm run dev
+
+  5. Check the composition:
+     cd composition && npm run check
+
+  6. Render to MP4 when ready:
+     cd composition && npm run render
+
+  Full docs: hyperframes.heygen.com

@@ -32,6 +32,7 @@ _FORMATS = {
     "markdown": lambda report, _path: reports.to_markdown(report),
     "json": lambda report, _path: reports.to_json(report),
     "sarif": lambda report, path: reports.to_sarif(report, manifest_path=path),
+    "html": lambda report, _path: reports.to_html(report),
 }
 
 # Exit codes are the contract the GitHub Action relies on.
@@ -184,6 +185,8 @@ def cmd_diff(args: argparse.Namespace) -> int:
         output = diff.to_markdown(result)
     elif args.format == "json":
         output = json.dumps(diff.to_dict(result), indent=2, ensure_ascii=False)
+    elif args.format == "html":
+        output = diff.to_html(result)
     else:
         anchor = next((s.path for s in result.head.sources if s.supported), "agent-assurance.yaml")
         output = reports.to_sarif(result.head, anchor, result.baseline_states())

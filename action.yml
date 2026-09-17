@@ -42,6 +42,10 @@ inputs:
     description: "Upload the SARIF to GitHub code scanning (needs permissions: security-events: write)"
     required: false
     default: "false"
+  card:
+    description: "Also write a single-file HTML capability card at this path (uploaded as an artifact)"
+    required: false
+    default: ""
   attest:
     description: "Write an in-toto attestation (aa-attestation.json, uploaded as an artifact) and, when 'sign', also sign it with Sigstore via actions/attest (needs permissions: id-token: write, attestations: write; public repo or GitHub Enterprise). Values: '', 'write', 'sign'"
     required: false
@@ -135,6 +139,19 @@ runs:
       # The verdict was already recorded above; here only exit 2 (no report) matters.
       run: |
         eval "$(cat .aa-cmd)" --format sarif --output "${{ inputs.sarif }}" || [ $? -ne 2 ]
+
+    - name: "Write capability card (optional)"
+      if: ${{ inputs.card != '' }}
+      shell: bash
+      run: |
+        eval "$(cat .aa-cmd)" --format html --output "${{ inputs.card }}" || [ $? -ne 2 ]
+
+    - name: Upload capability card
+      if: ${{ inputs.card != '' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: agent-assurance-card
+        path: ${{ inputs.card }}
 
     - name: "Write attestation (optional)"
       if: ${{ inputs.attest != '' && inputs.mode != 'diff' }}
