@@ -1,5 +1,5 @@
 # Living demo of `mode: diff`: on every pull request, report what the change
-# does to the bundled "promise kept" repo. A PR that widens that repo's reach
+# does to examples/demo/analytics-helper (a copy of the promise-kept fixture kept apart from the tests). A PR that widens that repo's reach
 # turns red and gets a comment; see the open demo PR.
 name: Agent Assurance (PR diff demo)
 
@@ -12,14 +12,14 @@ permissions:
 
 jobs:
   diff-promise-kept:
-    name: diff — examples/repos/mcp-promise-kept
+    name: diff — examples/demo/analytics-helper
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: ./
         with:
           mode: diff
-          directory: examples/repos/mcp-promise-kept
-          manifest: examples/repos/mcp-promise-kept/agent-assurance.yaml
+          directory: examples/demo/analytics-helper
+          manifest: examples/demo/analytics-helper/agent-assurance.yaml
           comment: "true"
           fail-on-delta: "true"
