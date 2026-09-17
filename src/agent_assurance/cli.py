@@ -5,6 +5,7 @@ Commands:
   agent-assurance check [blast-radius|all] <manifest> [--format md|json|sarif] [--output FILE]
   agent-assurance scan <dir> [--manifest FILE] [--format ...] [--output FILE]
   agent-assurance diff <base-dir> <head-dir> [--fail-on-delta] [--format ...]
+  agent-assurance attest <dir> [--manifest FILE] -o attestation.json
 
 Exit codes: 0 = pass/review, 1 = FAIL, 2 = usage/manifest error.
 Use --fail-on {fail,review} to control what gates the pipeline.
@@ -17,7 +18,7 @@ import json
 import os
 import sys
 
-from . import __version__, diff, engine, reports
+from . import __version__, attest, diff, engine, reports
 from .checks import CHECK_ALIASES
 from .checks.base import Context, Status
 from .manifest import Manifest, ManifestError
@@ -102,20 +103,20 @@ def cmd_check(args: argparse.Namespace) -> int:
     return _gate(report, args.fail_on)
 
 
-def cmd_scan(args: argparse.Namespace) -> int:
+def _scan_report(args: argparse.Namespace):
+    """Shared by scan and attest: (report, declared_path) or (None, exit code)."""
     root = args.directory
     if not os.path.isdir(root):
         print(f"error: not a directory: {root}", file=sys.stderr)
-        return EXIT_USAGE
-
-    # The declaration (the promise) is optional. Default: <dir>/agent-assurance.yaml.
+        return None, EXIT_USAGE
     declared = None
     manifest_path = args.manifest or os.path.join(root, "agent-assurance.yaml")
     if args.manifest or os.path.isfile(manifest_path):
         declared = _load(manifest_path)
         if declared is None:
-            return EXIT_USAGE
-
+            return None, EXIT_USAGE
+    else:
+        manifest_path = None
     result = scan_directory(root, declared)
     if not result.found_anything and declared is None:
         print(
@@ -125,18 +126,43 @@ def cmd_scan(args: argparse.Namespace) -> int:
         )
         for src in result.sources:
             print(f"  detected but not supported: {src.path} ({src.kind})", file=sys.stderr)
-        return EXIT_USAGE
-
+        return None, EXIT_USAGE
     ctx = Context(declared=declared, observed=result.observed)
     try:
         report = engine.run(result.observed, _resolve_checks(args.check), ctx, result.sources)
     except KeyError as exc:
         print(f"error: {exc}", file=sys.stderr)
-        return EXIT_USAGE
+        return None, EXIT_USAGE
+    return (report, manifest_path), EXIT_OK
 
+
+def cmd_scan(args: argparse.Namespace) -> int:
+    got, code = _scan_report(args)
+    if got is None:
+        return code
+    report, manifest_path = got
     # SARIF anchor: the first scanned file, relative to the scanned directory.
-    anchor = next((s.path for s in result.sources if s.supported), manifest_path)
+    anchor = next((s.path for s in report.sources if s.supported), manifest_path or "agent-assurance.yaml")
     _emit(report, args, anchor)
+    return _gate(report, args.fail_on)
+
+
+def cmd_attest(args: argparse.Namespace) -> int:
+    """Write an in-toto statement; the exit code still reports the gate so a
+    pipeline can archive the evidence *and* stop on a broken promise."""
+    got, code = _scan_report(args)
+    if got is None:
+        return code
+    report, manifest_path = got
+    statement = attest.build(args.directory, manifest_path, report)
+    text = attest.to_json(statement)
+    if args.output:
+        with open(args.output, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        subjects = ", ".join(s["name"] for s in statement["subject"])
+        print(f"wrote attestation to {args.output} (subjects: {subjects})", file=sys.stderr)
+    else:
+        print(text)
     return _gate(report, args.fail_on)
 
 
@@ -210,6 +236,14 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--output", "-o", default=None, help="write report to a file")
     ps.add_argument("--fail-on", choices=["fail", "review"], default="fail")
     ps.set_defaults(func=cmd_scan)
+
+    pa = sub.add_parser("attest", help="write an in-toto statement (evidence) for what the config grants at this commit")
+    pa.add_argument("directory", nargs="?", default=".")
+    pa.add_argument("--manifest", "-m", default=None)
+    pa.add_argument("--check", default="all")
+    pa.add_argument("--output", "-o", default=None)
+    pa.add_argument("--fail-on", choices=["fail", "review"], default="fail")
+    pa.set_defaults(func=cmd_attest)
 
     pd = sub.add_parser("diff", help="compare two checked-out trees: what did this change do to the agent's reach and promise?")
     pd.add_argument("base")

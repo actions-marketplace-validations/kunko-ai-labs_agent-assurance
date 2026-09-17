@@ -42,6 +42,10 @@ inputs:
     description: "Upload the SARIF to GitHub code scanning (needs permissions: security-events: write)"
     required: false
     default: "false"
+  attest:
+    description: "Write an in-toto attestation (aa-attestation.json, uploaded as an artifact) and, when 'sign', also sign it with Sigstore via actions/attest (needs permissions: id-token: write, attestations: write; public repo or GitHub Enterprise). Values: '', 'write', 'sign'"
+    required: false
+    default: ""
 
 runs:
   using: "composite"
@@ -131,6 +135,41 @@ runs:
       # The verdict was already recorded above; here only exit 2 (no report) matters.
       run: |
         eval "$(cat .aa-cmd)" --format sarif --output "${{ inputs.sarif }}" || [ $? -ne 2 ]
+
+    - name: "Write attestation (optional)"
+      if: ${{ inputs.attest != '' && inputs.mode != 'diff' }}
+      id: attest
+      shell: bash
+      # Evidence is written whatever the verdict; only a usage error (2) stops here.
+      run: |
+        dir="${{ inputs.directory }}"
+        cmd=(agent-assurance attest "$dir" --check "${{ inputs.check }}")
+        if [ -f "${{ inputs.manifest }}" ]; then cmd+=(--manifest "${{ inputs.manifest }}"); fi
+        "${cmd[@]}" --output aa-attestation.json || [ $? -ne 2 ]
+        python3 - <<'PY' >> "$GITHUB_OUTPUT"
+        import json, os
+        s = json.load(open("aa-attestation.json"))
+        d = os.environ.get("DIR", ".")
+        paths = "\n".join(os.path.normpath(os.path.join(d, x["name"])) for x in s["subject"])
+        print("subjects<<EOF\n" + paths + "\nEOF")
+        PY
+      env:
+        DIR: ${{ inputs.directory }}
+
+    - name: Upload attestation artifact
+      if: ${{ inputs.attest != '' && inputs.mode != 'diff' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: agent-assurance-attestation
+        path: aa-attestation.json
+
+    - name: "Sign attestation with Sigstore (optional)"
+      if: ${{ inputs.attest == 'sign' && inputs.mode != 'diff' }}
+      uses: actions/attest@v2
+      with:
+        subject-path: ${{ steps.attest.outputs.subjects }}
+        predicate-type: https://github.com/kunko-ai-labs/agent-assurance/attestation/v1
+        predicate-path: aa-attestation.json
 
     - name: Upload SARIF to code scanning (optional)
       if: ${{ inputs.sarif != '' && inputs.upload-sarif == 'true' }}

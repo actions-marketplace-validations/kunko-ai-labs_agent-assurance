@@ -87,7 +87,7 @@ jobs:
           path: aa.sarif
 
   scan-promise-kept:
-    name: scan — promise kept (must PASS)
+    name: scan — promise kept (must PASS) + attestation written
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -98,6 +98,20 @@ jobs:
           directory: examples/repos/mcp-promise-kept
           manifest: examples/repos/mcp-promise-kept/agent-assurance.yaml
           fail-on: review   # a kept promise has nothing to review either
+          attest: write     # 'sign' needs a public repo or GHE; asserted below
+      - name: Assert the attestation is a valid in-toto statement about the right files
+        run: |
+          python3 - <<'PY'
+          import json
+          s = json.load(open("aa-attestation.json"))
+          assert s["_type"] == "https://in-toto.io/Statement/v1"
+          assert s["predicateType"].endswith("/attestation/v1")
+          names = sorted(x["name"] for x in s["subject"])
+          assert names == [".mcp.json", "agent-assurance.yaml"], names
+          assert s["predicate"]["report"]["verdict"] == "PASS"
+          assert s["predicate"]["git"]["commit"]
+          print("attestation ok:", names, s["predicate"]["git"]["commit"][:7])
+          PY
 
   scan-promise-broken:
     name: scan — promise broken (must BLOCK)
