@@ -24,7 +24,13 @@ _DEFAULT_MANIFEST = "agent-assurance.yaml"
 _ANCHOR_LINE = 1
 
 
-def to_dict(report: AssuranceReport, manifest_path: str = _DEFAULT_MANIFEST) -> dict:
+def to_dict(
+    report: AssuranceReport,
+    manifest_path: str = _DEFAULT_MANIFEST,
+    baseline: dict[str, str] | None = None,
+) -> dict:
+    """`baseline` maps check id -> SARIF baselineState (new/unchanged/updated/absent),
+    supplied by `diff` so code scanning can tell a new finding from an old one."""
     rules = []
     results = []
     seen_rules: set[str] = set()
@@ -81,6 +87,7 @@ def to_dict(report: AssuranceReport, manifest_path: str = _DEFAULT_MANIFEST) -> 
                 "partialFingerprints": {
                     "agentAssurance/v1": f"{r.check_id}:{agent}:{manifest_path}"
                 },
+                **({"baselineState": baseline[r.check_id]} if baseline and r.check_id in baseline else {}),
             }
         )
 
@@ -105,5 +112,9 @@ def to_dict(report: AssuranceReport, manifest_path: str = _DEFAULT_MANIFEST) -> 
     }
 
 
-def to_sarif(report: AssuranceReport, manifest_path: str = _DEFAULT_MANIFEST) -> str:
-    return json.dumps(to_dict(report, manifest_path), indent=2, ensure_ascii=False)
+def to_sarif(
+    report: AssuranceReport,
+    manifest_path: str = _DEFAULT_MANIFEST,
+    baseline: dict[str, str] | None = None,
+) -> str:
+    return json.dumps(to_dict(report, manifest_path, baseline), indent=2, ensure_ascii=False)

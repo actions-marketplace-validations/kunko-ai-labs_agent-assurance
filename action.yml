@@ -7,9 +7,17 @@ branding:
 
 inputs:
   mode:
-    description: "'check' runs the checks on the manifest alone; 'scan' observes the repo's agent configuration (.mcp.json, ...) and verifies it against the manifest if one exists"
+    description: "'check' runs the checks on the manifest alone; 'scan' observes the repo's agent configuration and verifies it against the manifest if one exists; 'diff' (on pull_request) compares base vs head and reports what the change does to reach and promise"
     required: false
     default: "check"
+  comment:
+    description: "In diff mode on a pull_request: post/update one PR comment with the result (needs permissions: pull-requests: write)"
+    required: false
+    default: "true"
+  fail-on-delta:
+    description: "In diff mode: also fail when reach grows, the band rises or the promise breaks (default true)"
+    required: false
+    default: "true"
   directory:
     description: "Directory to scan (mode: scan)"
     required: false
@@ -47,16 +55,33 @@ runs:
       shell: bash
       run: pip install "${{ github.action_path }}"
 
+    - name: Check out the base tree (mode: diff)
+      if: ${{ inputs.mode == 'diff' }}
+      shell: bash
+      # The PR base goes into a detached worktree; nothing in it is executed.
+      run: |
+        base="${{ github.event.pull_request.base.sha || github.event.before }}"
+        if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+          echo "::error::diff mode needs a pull_request (or push with a previous commit) event"; exit 2
+        fi
+        git fetch --no-tags --depth=1 origin "$base"
+        git worktree add --detach "$RUNNER_TEMP/aa-base" "$base"
+        echo "base=$base"
+
     - name: Resolve command
       shell: bash
       # One place decides the CLI invocation, so the report and SARIF steps agree.
       run: |
-        if [ "${{ inputs.mode }}" = "scan" ]; then
-          cmd=(agent-assurance scan "${{ inputs.directory }}" --check "${{ inputs.check }}")
-          if [ -f "${{ inputs.manifest }}" ]; then cmd+=(--manifest "${{ inputs.manifest }}"); fi
-        else
-          cmd=(agent-assurance check "${{ inputs.check }}" "${{ inputs.manifest }}")
-        fi
+        case "${{ inputs.mode }}" in
+          scan)
+            cmd=(agent-assurance scan "${{ inputs.directory }}" --check "${{ inputs.check }}")
+            if [ -f "${{ inputs.manifest }}" ]; then cmd+=(--manifest "${{ inputs.manifest }}"); fi ;;
+          diff)
+            cmd=(agent-assurance diff "$RUNNER_TEMP/aa-base/${{ inputs.directory }}" "${{ inputs.directory }}")
+            if [ "${{ inputs.fail-on-delta }}" = "true" ]; then cmd+=(--fail-on-delta); fi ;;
+          *)
+            cmd=(agent-assurance check "${{ inputs.check }}" "${{ inputs.manifest }}") ;;
+        esac
         printf '%q ' "${cmd[@]}" > .aa-cmd
         echo "command: $(cat .aa-cmd)"
 
@@ -79,6 +104,26 @@ runs:
         if [ "$code" -eq 2 ]; then exit 2; fi
         # exit 1 = the assurance gate tripped: recorded, enforced in the final step.
         if [ "$code" -ne 0 ]; then echo "AA_FAILED=1" >> "$GITHUB_ENV"; fi
+
+    - name: Comment on the pull request (mode: diff)
+      if: ${{ inputs.mode == 'diff' && inputs.comment == 'true' && github.event_name == 'pull_request' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPO: ${{ github.repository }}
+        PR: ${{ github.event.pull_request.number }}
+      # One comment per (directory), updated on every push instead of a new one.
+      run: |
+        marker="<!-- agent-assurance:${{ inputs.directory }} -->"
+        { echo "$marker"; cat aa-report.md; } > aa-comment.md
+        id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+              --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -1 || true)
+        if [ -n "$id" ]; then
+          gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@aa-comment.md > /dev/null
+          echo "updated comment $id"
+        else
+          gh pr comment "$PR" --body-file aa-comment.md
+        fi
 
     - name: Emit SARIF (optional)
       if: ${{ inputs.sarif != '' }}

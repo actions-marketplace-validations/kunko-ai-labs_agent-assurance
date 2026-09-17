@@ -4,6 +4,7 @@ Commands:
   agent-assurance validate <manifest>
   agent-assurance check [blast-radius|all] <manifest> [--format md|json|sarif] [--output FILE]
   agent-assurance scan <dir> [--manifest FILE] [--format ...] [--output FILE]
+  agent-assurance diff <base-dir> <head-dir> [--fail-on-delta] [--format ...]
 
 Exit codes: 0 = pass/review, 1 = FAIL, 2 = usage/manifest error.
 Use --fail-on {fail,review} to control what gates the pipeline.
@@ -12,10 +13,11 @@ Use --fail-on {fail,review} to control what gates the pipeline.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 
-from . import __version__, engine, reports
+from . import __version__, diff, engine, reports
 from .checks import CHECK_ALIASES
 from .checks.base import Context, Status
 from .manifest import Manifest, ManifestError
@@ -138,6 +140,39 @@ def cmd_scan(args: argparse.Namespace) -> int:
     return _gate(report, args.fail_on)
 
 
+def cmd_diff(args: argparse.Namespace) -> int:
+    for d in (args.base, args.head):
+        if not os.path.isdir(d):
+            print(f"error: not a directory: {d}", file=sys.stderr)
+            return EXIT_USAGE
+    try:
+        result = diff.compute(args.base, args.head, args.manifest)
+    except ManifestError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    if result is None:
+        print("error: nothing to compare: no agent configuration or manifest on either side", file=sys.stderr)
+        return EXIT_USAGE
+
+    if args.format in ("md", "markdown"):
+        output = diff.to_markdown(result)
+    elif args.format == "json":
+        output = json.dumps(diff.to_dict(result), indent=2, ensure_ascii=False)
+    else:
+        anchor = next((s.path for s in result.head.sources if s.supported), "agent-assurance.yaml")
+        output = reports.to_sarif(result.head, anchor, result.baseline_states())
+    if args.output:
+        with open(args.output, "w", encoding="utf-8") as fh:
+            fh.write(output)
+        print(f"wrote {args.format} diff to {args.output}", file=sys.stderr)
+    else:
+        print(output)
+
+    if args.fail_on_delta and result.regressed:
+        return EXIT_GATE
+    return _gate(result.head, args.fail_on)
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="agent-assurance",
@@ -175,6 +210,16 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--output", "-o", default=None, help="write report to a file")
     ps.add_argument("--fail-on", choices=["fail", "review"], default="fail")
     ps.set_defaults(func=cmd_scan)
+
+    pd = sub.add_parser("diff", help="compare two checked-out trees: what did this change do to the agent's reach and promise?")
+    pd.add_argument("base")
+    pd.add_argument("head")
+    pd.add_argument("--manifest", "-m", default=None, help="declared manifest to hold both sides against (default: each side's own)")
+    pd.add_argument("--format", choices=list(_FORMATS.keys()), default="md")
+    pd.add_argument("--output", "-o", default=None)
+    pd.add_argument("--fail-on", choices=["fail", "review"], default="fail", help="gate on the head verdict")
+    pd.add_argument("--fail-on-delta", action="store_true", help="also gate when reach grows, the band rises or the promise breaks")
+    pd.set_defaults(func=cmd_diff)
     return p
 
 
