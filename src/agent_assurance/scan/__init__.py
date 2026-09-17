@@ -21,10 +21,9 @@ SCANNERS: list[Scanner] = [McpJsonScanner(), ClaudeSettingsScanner()]
 # Recognised but not parsed yet. Listed so the report can say "detected, not
 # supported" instead of staying silent. Each becomes a scanner in its own issue.
 KNOWN_UNSUPPORTED: dict[str, str] = {
-    ".cursor/mcp.json": "cursor-mcp",
-    ".vscode/mcp.json": "vscode-mcp",
-    ".gemini/settings.json": "gemini-cli-settings",
-    ".codex/config.toml": "codex-config",
+    ".codex/config.toml": "codex-config (TOML: [mcp_servers.<name>])",
+    "claude_desktop_config.json": "claude-desktop (user scope, not a repo file)",
+    "AGENTS.md": "agent instructions (not permissions; see ruleblast for instruction blast radius)",
 }
 
 

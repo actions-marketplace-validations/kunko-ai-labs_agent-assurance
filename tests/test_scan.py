@@ -51,7 +51,7 @@ def test_unknown_server_is_unknown_not_guessed():
 def test_unsupported_files_are_listed_not_silent():
     result = scan_directory(UNKNOWN)
     unsupported = [s for s in result.sources if not s.supported]
-    assert [s.path for s in unsupported] == [".cursor/mcp.json"]
+    assert [s.path for s in unsupported] == [".codex/config.toml"]
 
 
 def test_declared_metadata_survives_merge():
@@ -146,11 +146,28 @@ def test_unknown_plus_undeclared_secret_is_a_broken_promise(tmp_path):
 
 
 def test_nothing_to_scan_is_a_usage_error(tmp_path, capsys):
-    (tmp_path / ".cursor").mkdir()
-    (tmp_path / ".cursor" / "mcp.json").write_text("{}", encoding="utf-8")
+    (tmp_path / ".codex").mkdir()
+    (tmp_path / ".codex" / "config.toml").write_text("", encoding="utf-8")
     assert cli.main(["scan", str(tmp_path)]) == cli.EXIT_USAGE
     err = capsys.readouterr().err
-    assert "nothing to scan" in err and ".cursor/mcp.json" in err
+    assert "nothing to scan" in err and ".codex/config.toml" in err
+
+
+@pytest.mark.parametrize(
+    ("rel", "payload"),
+    [
+        (".cursor/mcp.json", '{"mcpServers": {"github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"]}}}'),
+        (".gemini/settings.json", '{"theme": "x", "mcpServers": {"github": {"command": "github-mcp-server", "args": ["stdio"]}}}'),
+        (".vscode/mcp.json", '{"servers": {"github": {"type": "http", "url": "https://api.githubcopilot.com/mcp"}}}'),
+    ],
+)
+def test_other_hosts_share_the_mcp_scanner(tmp_path, rel, payload):
+    f = tmp_path / rel
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(payload, encoding="utf-8")
+    result = scan_directory(str(tmp_path))
+    assert result.found_anything and result.sources[0].path == rel
+    assert any(t.system == "github" and t.type is ToolAccess.WRITE for t in result.observed.tools)
 
 
 def test_scan_sarif_anchors_each_finding(tmp_path):

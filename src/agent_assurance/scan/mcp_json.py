@@ -1,10 +1,15 @@
-"""Scanner for `.mcp.json` (project-scoped MCP servers, as used by Claude Code
-and compatible clients).
+"""Scanner for project-scoped MCP server configuration files.
 
-Format (as documented for Claude Code project MCP config):
+The same shape is used by several hosts, so one scanner covers all of them
+(formats as documented by each vendor, read on 2026-09-17):
 
-    {"mcpServers": {"<name>": {"command": "...", "args": [...], "env": {...}}}}
-    {"mcpServers": {"<name>": {"type": "http"|"sse", "url": "...", "headers": {}}}}
+    .mcp.json              Claude Code      {"mcpServers": {...}}
+    .cursor/mcp.json       Cursor           {"mcpServers": {...}}   cursor.com/docs/mcp
+    .gemini/settings.json  Gemini CLI       {"mcpServers": {...}}   geminicli.com/docs/tools/mcp-server
+    .vscode/mcp.json       VS Code/Copilot  {"servers": {...}}      code.visualstudio.com/docs/agents/reference/mcp-configuration
+
+Each server entry is either local ({"command", "args", "env"}) or remote
+({"type": "http"|"sse", "url", "headers"}).
 
 What can be known without running anything:
 - the server exists (-> a system the agent can reach);
@@ -26,16 +31,22 @@ from ..manifest import DataClass, DataSource, Tool, ToolAccess
 from . import catalog
 from .base import Observation, Scanner, Source
 
-FILE_NAME = ".mcp.json"
+# (relative path, kind label, top-level key holding the servers)
+FILES: tuple[tuple[str, str, str], ...] = (
+    (".mcp.json", "mcp.json (Claude Code)", "mcpServers"),
+    (".cursor/mcp.json", "cursor-mcp", "mcpServers"),
+    (".gemini/settings.json", "gemini-cli-settings", "mcpServers"),
+    (".vscode/mcp.json", "vscode-mcp", "servers"),
+)
 _CRED_RE = re.compile(r"(token|secret|key|password|passwd|credential|auth)", re.IGNORECASE)
 
 
-def _line_of_server(text: str, name: str) -> int:
-    """Line number of the `"<name>":` key inside mcpServers (1 if not found)."""
+def _line_of_server(text: str, name: str, block_key: str) -> int:
+    """Line number of the `"<name>":` key inside the servers block (1 if not found)."""
     key = re.compile(r'^\s*"' + re.escape(name) + r'"\s*:')
     seen_block = False
     for i, line in enumerate(text.splitlines(), start=1):
-        if '"mcpServers"' in line:
+        if f'"{block_key}"' in line:
             seen_block = True
             continue
         if seen_block and key.match(line):
@@ -44,16 +55,17 @@ def _line_of_server(text: str, name: str) -> int:
 
 
 class McpJsonScanner(Scanner):
-    kind = "mcp.json"
+    kind = "mcp-config"
 
     def detect(self, root: str) -> list[str]:
-        return [FILE_NAME] if os.path.isfile(os.path.join(root, FILE_NAME)) else []
+        return [rel for rel, _, _ in FILES if os.path.isfile(os.path.join(root, rel))]
 
     def parse(self, root: str, rel_path: str) -> Observation:
+        kind, block_key = next((k, b) for rel, k, b in FILES if rel == rel_path)
         path = os.path.join(root, rel_path)
         with open(path, encoding="utf-8") as fh:
             text = fh.read()
-        source = Source(path=rel_path, kind=self.kind, supported=True)
+        source = Source(path=rel_path, kind=kind, supported=True)
         obs = Observation(source=source)
 
         try:
@@ -63,16 +75,16 @@ class McpJsonScanner(Scanner):
             source.note = f"invalid JSON: {exc.msg} (line {exc.lineno})"
             return obs
 
-        servers = raw.get("mcpServers") if isinstance(raw, dict) else None
+        servers = raw.get(block_key) if isinstance(raw, dict) else None
         if not isinstance(servers, dict):
-            source.note = "no mcpServers block"
+            source.note = f"no {block_key} block"
             return obs
 
         notes: list[str] = []
         for name, spec in servers.items():
             if not isinstance(spec, dict):
                 continue
-            line = _line_of_server(text, name)
+            line = _line_of_server(text, name, block_key)
             where = f"{rel_path}:{line}"
             command_line = " ".join(
                 [str(spec.get("command", ""))]
