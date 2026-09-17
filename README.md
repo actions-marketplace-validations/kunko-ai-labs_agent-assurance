@@ -61,7 +61,7 @@ permissions:
   id-token: write
   attestations: write
 steps:
-  - uses: kunko-ai-labs/agent-assurance@v0.4
+  - uses: kunko-ai-labs/agent-assurance@v0.5
     with:
       mode: scan
       attest: sign          # 'write' = unsigned JSON artifact only
@@ -143,7 +143,7 @@ Schema: [`schema/agent-assurance.schema.json`](schema/agent-assurance.schema.jso
 
 ## What the scanner understands
 
-**MCP server configs** — `.mcp.json` (Claude Code), `.cursor/mcp.json`, `.gemini/settings.json`, `.vscode/mcp.json`. Each server becomes a system. Its access classes come from the catalogue entry for its package or name (e.g. `@modelcontextprotocol/server-github` → read, write). A remote `url` is network egress; an `env`/`headers` name that looks like a credential is credential access (the value is never read). The same server declared for several hosts counts once. A server not in the catalogue is `UNKNOWN`.
+**MCP server configs** — `.mcp.json` (Claude Code), `.cursor/mcp.json`, `.gemini/settings.json`, `.vscode/mcp.json`, `.codex/config.toml` (Codex CLI). Each server becomes a system. Its access classes come from the catalogue entry for its package or name (e.g. `@modelcontextprotocol/server-github` → read, write). A remote `url` is network egress; an `env`/`headers` name that looks like a credential is credential access (the value is never read). The same server declared for several hosts counts once. A server not in the catalogue is `UNKNOWN`.
 
 **Claude Code permissions** — `.claude/settings.json` and `settings.local.json`. Claude Code's built-in tools exist whether or not they are listed; a rule decides whether a **human approves** the call. So `allow` = runs without approval, `ask` = a person confirms, `deny` = removed. Precedence: deny > ask > allow. Rules collapse per capability class: ten `allow: Bash(...)` rules are one shell grant, not ten.
 
@@ -159,7 +159,9 @@ Schema: [`schema/agent-assurance.schema.json`](schema/agent-assurance.schema.jso
 | `defaultMode: acceptEdits` / `bypassPermissions` | write / execute, auto-approved | |
 | anything else | unknown | scored as write, never as safe |
 
-Every scan ends with a **Sources scanned** table: files parsed, files detected but not supported yet (`.codex/config.toml`, `AGENTS.md`), and what was deduced from each. A repo with nothing scannable and nothing declared exits 2 — never an empty PASS.
+**Serialized tool definitions** (business agents) — `agent-tools.json|yaml` at the root, plus any file listed in the policy's `tool_definition_files`: OpenAI function tools, OpenAI Agents SDK, MCP tool objects, Claude client tools, LangChain / LangGraph / CrewAI serialized metadata. A tool definition has a name and a description, not an access class, so the class is **inferred** from verbs (`refund` → financial, `delete` → delete, `send` → external_send, `run` → execute, `update` → write, `search` → read; anything else UNKNOWN) and the tool is marked `inferred`. It scores like its class, but AA-002 reports an undeclared inferred class as *review*, never *broken*: a guess must not fail a build. Nothing is imported or executed.
+
+Every scan ends with a **Sources scanned** table: files parsed, files detected but not supported (`AGENTS.md`, `claude_desktop_config.json`), and what was deduced from each. A repo with nothing scannable and nothing declared exits 2 — never an empty PASS.
 
 ## The risk model is transparent
 
@@ -176,7 +178,33 @@ Not an "AI risk score". Every point is attributable:
 | tool of unknown class (`UNKNOWN`) | 3 (scored as write, never as safe) |
 | non-read, unscoped tool auto-approved by the host | +2 |
 
-Bands: LOW `<8` · MEDIUM `<16` · HIGH `<28` · CRITICAL `>=28`. HIGH → review, CRITICAL → fail (configurable with `--fail-on`). Weights live in one file, [`risk.py`](src/agent_assurance/risk.py).
+Bands: LOW `<8` · MEDIUM `<16` · HIGH `<28` · CRITICAL `>=28`. HIGH → review, CRITICAL → fail (configurable with `--fail-on`). Weights live in one file, [`risk.py`](src/agent_assurance/risk.py) — and an organisation can override them without forking:
+
+### Organisation policy
+
+`agent-assurance.policy.yaml` next to the manifest (or `--policy`), schema in [`schema/`](schema/agent-assurance.policy.schema.json):
+
+```yaml
+apiVersion: agent-assurance/policy/v1
+name: acme-corp-2026-09
+weights: { tools: { read: 1, write: 3 }, auto_approval: 2 }   # any subset; defaults fill the rest
+bands: { medium: 8, high: 16, critical: 28 }
+gate: { review_bands: [MEDIUM], fail_bands: [HIGH, CRITICAL] }  # stricter than default
+promise:
+  breaking_access: [write, delete, execute, financial]           # external_send only reviews here
+  breaking_data: [pii, health, credential]
+read_only_commands: [make lint, poetry run pytest]              # added to the built-in list
+catalog:                                                        # your own MCP servers: no longer UNKNOWN
+  - system: acme-erp
+    aliases: [acme-erp]
+    packages: [acme-erp-mcp]
+    capabilities: [{ suffix: read, access: read }]
+    data: [financial]
+    source: "platform team: ERP MCP v2 is read-only"
+tool_definition_files: [agents/tools.yaml]
+```
+
+No policy = the built-in model, exactly (asserted in tests). With a policy, every report, card and attestation records its name and sha256: a verdict is reproducible only with the policy that produced it. Example: [`examples/repos/policy-org`](examples/repos/policy-org).
 
 ## Use it
 
@@ -191,7 +219,13 @@ agent-assurance check all agent-assurance.yaml           # the promise alone: ho
 agent-assurance validate agent-assurance.yaml            # schema-check
 ```
 
-Formats: `md` (PR comment / job summary), `json` (pipelines), `sarif` (GitHub code scanning; PASS is `kind: pass` so a clean agent never creates an alert; `diff` adds `baselineState`).
+Formats: `md` (PR comment / job summary), `json` (pipelines), `sarif` (GitHub code scanning; PASS is `kind: pass` so a clean agent never creates an alert; `diff` adds `baselineState`), `html` (the **capability card**).
+
+### Capability card
+
+`--format html` writes a single self-contained file — no scripts, no external assets — that reads like a nutrition label: verdict, the promise, what was observed with file:line and whether a human is in the loop, the score breakdown, sources scanned, policy and tool version. Same facts as the JSON. Send it to an auditor, a customer, or your manager; in the Action, `card: aa-card.html` uploads it as an artifact.
+
+![Capability card for a broken promise](docs/capability-card.png)
 
 **Exit codes are a contract:** `0` pass (REVIEW too, unless `--fail-on review`) · `1` gate tripped · `2` usage/manifest error. Tested in `tests/test_cli_contract.py` and exercised with the installed binary in CI.
 
@@ -207,7 +241,7 @@ permissions:
 
 steps:
   - uses: actions/checkout@v4
-  - uses: kunko-ai-labs/agent-assurance@v0.4
+  - uses: kunko-ai-labs/agent-assurance@v0.5
     with:
       mode: diff             # on pull_request: what did this change do? (comment + gate)
       # mode: scan           # on push: observe + verify, SARIF to the Security tab
@@ -216,6 +250,9 @@ steps:
       fail-on-delta: "true"  # diff: also fail when reach grows or the promise breaks
       sarif: aa.sarif        # optional
       upload-sarif: "true"   # optional
+      card: aa-card.html     # optional: capability card artifact
+      attest: write          # optional: in-toto evidence ('sign' = Sigstore, needs id-token/attestations: write)
+      policy: agent-assurance.policy.yaml   # optional
 ```
 
 The markdown report lands in the job summary; in `diff` mode one PR comment is created and then updated on every push. This repo's own [`assurance.yml`](.github/workflows/assurance.yml) asserts that the Action passes what it should and blocks what it should — a green run means the gate still works.
@@ -269,9 +306,8 @@ Add a source: subclass `scan.base.Scanner` (`detect()` + `parse()` returning too
 | v0.2 (done) | `scan` for MCP configs + Claude Code permissions; AA-002 declared vs observed | The manifest becomes an attestation |
 | v0.3 (done) | `diff` base vs head; Action `mode: diff` with PR comment; MCP server + hook; Cursor/Gemini/VS Code configs | The promise is enforced where the change happens |
 | v0.4 (done) | **Attestation** per commit/release: in-toto statement, Sigstore-signed via `actions/attest` | Evidence that survives the repo — what AI Act art. 12 and SOC 2 reviewers actually ask for |
-| next | **Capability card**: a single-file HTML "nutrition label" per agent, from the same JSON, shareable with auditors and customers | People outside the repo need to read the verdict too |
-| next | **Policy file** (`agent-assurance.policy.yaml`): tune weights, bands and which classes break a promise, per org | Seniors want the model, not our defaults |
-| next | More observed sources: Codex `config.toml`, OpenAI Agents / LangChain / CrewAI serialized tool definitions | Business agents, not only coding agents |
+| v0.5 (done) | **Capability card** (HTML), **organisation policy** (weights, gate, promise semantics, own catalogue), Codex `config.toml`, serialized tool definitions with inferred classes | Readable outside the repo; tunable without forking; business agents, not only coding agents |
+| next | Verified Sigstore signing in CI once public; `gh attestation verify` walkthrough; more catalogue entries from real-world scans; a `--baseline` to accept a known state | Adoption feedback decides the order |
 
 Runtime governance (intercepting calls, approvals, ledgers) is a different product and stays out of scope here: this tool checks what the repo says the agent can do, and holds it to its word.
 
