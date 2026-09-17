@@ -2,6 +2,8 @@
 
 **Declare what your agent may do. Verify it on every edit, every PR, every release.**
 
+*In one line: your agent's permissions become a promise, and every change is checked against it — with a signed record of what it could do, when.*
+
 Your repo *promises* what an AI agent is allowed to do (`agent-assurance.yaml`: read the CRM, no external send, a human approves actions). Agent Assurance *observes* what the configuration actually grants — MCP servers, Claude Code permissions — scores the blast radius, maps it to OWASP Agentic standards, and fails the change when the promise is broken, pointing at the file and line that broke it.
 
 No dashboard, no backend, no LLM in the verdict, no network calls, nothing executed. A rule-based model you can read and reproduce by hand.
@@ -15,6 +17,21 @@ agent-assurance scan .                # observe the config; verify the promise i
 
 ---
 
+## What it catches (real examples)
+
+| Situation | What Agent Assurance says | Where |
+|---|---|---|
+| A PR adds `@modelcontextprotocol/server-github` to an agent declared read-only | **Promise broken:** `github.write` grants write, not declared (`.mcp.json:17`); blast radius LOW → HIGH | PR comment + red job ([live PR](https://github.com/kunko-ai-labs/agent-assurance/pull/16)) |
+| `.claude/settings.json` gets `allow: Bash(*)` while the manifest says a human approves (L2) | **Promise broken:** `Bash(*)` runs without human approval, but declared autonomy is L2 | `examples/repos/claude-code-approval-broken` |
+| A server nobody recognises appears in `.mcp.json` | `UNKNOWN` capability, scored as write; **promise not verifiable** (review, never a silent pass) | `examples/repos/mcp-unknown-server` |
+| An MCP server config carries `GITHUB_PERSONAL_ACCESS_TOKEN` in `env` | Access to **credential** data, not declared (the value is never read, only the name) | same PR as above |
+| Twenty `allow: Bash(git status:*)`-style rules | One read-only shell grant, *not* twenty unattended shells — no false alarm | [`docs/real-world.md`](docs/real-world.md) |
+| A team adds `@stripe/mcp` | `stripe.refund` is **financial** and **irreversible** (+5); band jumps | catalogue entry with source |
+
+Four public repositories scanned as-is, with what the tool saw and what it did not: [`docs/real-world.md`](docs/real-world.md).
+
+![The PR comment on the live demo](docs/pr-comment.png)
+
 ## Why this exists
 
 Agents are moving from chat into production: writing to CRMs, sending email, touching infrastructure, moving money. When an agent changes — a new MCP server, a broader permission, an `allow` that removes the human from the loop — nobody notices until something breaks.
@@ -27,9 +44,37 @@ Vulnerability scanners look for poisoned tools and leaked secrets. Permission-di
 |---|---|---|
 | **While the agent edits** | Claude Code [PostToolUse hook](contrib/claude-code/) or the [MCP server](contrib/claude-code/) (`would_break`) | The agent is told, in the same turn, that its edit breaks the promise — before a commit exists |
 | **In the pull request** | GitHub Action `mode: diff` | One comment: *"Promise broken by this change: `github.write` grants write, not declared (.mcp.json:17)"*; job goes red |
-| **On every push / release** | Action `mode: scan` + SARIF | The verdict in the Security tab and the job summary, anchored at file:line, with a stable fingerprint per finding |
+| **On every push / release** | Action `mode: scan` + SARIF + `attest` | The verdict in the Security tab and the job summary, anchored at file:line — and an **in-toto attestation** (signed with Sigstore when `attest: sign`) that records what the agent could do at that commit |
 
 Same engine, same verdict, same words in all three.
+
+### Evidence that survives the repo
+
+```bash
+agent-assurance attest . -o aa-attestation.json
+```
+
+Writes an [in-toto Statement v1](https://in-toto.io/Statement/v1): the manifest and every parsed config file as subjects (sha256), and as predicate the tool version, timestamp, git commit, the declared promise, the observed capabilities, the full report and the standards touched. Archive it with the release, or let the Action sign it:
+
+```yaml
+permissions:
+  id-token: write
+  attestations: write
+steps:
+  - uses: kunko-ai-labs/agent-assurance@v0.4
+    with:
+      mode: scan
+      attest: sign          # 'write' = unsigned JSON artifact only
+```
+
+Then anyone can check, later, what your agent was allowed to do at a given commit and whether it matched the promise:
+
+```bash
+gh attestation verify .mcp.json -R your-org/your-repo \
+  --predicate-type https://github.com/kunko-ai-labs/agent-assurance/attestation/v1
+```
+
+This is the record-keeping shape EU AI Act art. 12 (reconstructability) and SOC 2 change-management reviews ask for, for the *capabilities* of an agent; the mapping is `adapted`, not a conformance claim. Runtime logs remain the other half. Sigstore signing needs a public repository or GitHub Enterprise; the unsigned JSON works everywhere.
 
 ## Two inputs, one verdict
 
@@ -141,6 +186,7 @@ Bands: LOW `<8` · MEDIUM `<16` · HIGH `<28` · CRITICAL `>=28`. HIGH → revie
 agent-assurance scan .                                   # observe + verify (picks up ./agent-assurance.yaml)
 agent-assurance scan path/to/repo -m promise.yaml --format sarif -o aa.sarif
 agent-assurance diff base-checkout head-checkout --fail-on-delta   # what did this change do?
+agent-assurance attest . -o aa-attestation.json          # evidence: what the config granted at this commit
 agent-assurance check all agent-assurance.yaml           # the promise alone: how much could it break?
 agent-assurance validate agent-assurance.yaml            # schema-check
 ```
@@ -161,7 +207,7 @@ permissions:
 
 steps:
   - uses: actions/checkout@v4
-  - uses: kunko-ai-labs/agent-assurance@v0.3
+  - uses: kunko-ai-labs/agent-assurance@v0.4
     with:
       mode: diff             # on pull_request: what did this change do? (comment + gate)
       # mode: scan           # on push: observe + verify, SARIF to the Security tab
@@ -222,8 +268,8 @@ Add a source: subclass `scan.base.Scanner` (`detect()` + `parse()` returning too
 |---|---|---|
 | v0.2 (done) | `scan` for MCP configs + Claude Code permissions; AA-002 declared vs observed | The manifest becomes an attestation |
 | v0.3 (done) | `diff` base vs head; Action `mode: diff` with PR comment; MCP server + hook; Cursor/Gemini/VS Code configs | The promise is enforced where the change happens |
+| v0.4 (done) | **Attestation** per commit/release: in-toto statement, Sigstore-signed via `actions/attest` | Evidence that survives the repo — what AI Act art. 12 and SOC 2 reviewers actually ask for |
 | next | **Capability card**: a single-file HTML "nutrition label" per agent, from the same JSON, shareable with auditors and customers | People outside the repo need to read the verdict too |
-| next | **Signed attestation** per release (`actions/attest` with an `agent-assurance/v1` predicate): declared, observed, verdict, commit | Evidence that survives the repo — what AI Act art. 12 and SOC 2 reviewers actually ask for |
 | next | **Policy file** (`agent-assurance.policy.yaml`): tune weights, bands and which classes break a promise, per org | Seniors want the model, not our defaults |
 | next | More observed sources: Codex `config.toml`, OpenAI Agents / LangChain / CrewAI serialized tool definitions | Business agents, not only coding agents |
 
