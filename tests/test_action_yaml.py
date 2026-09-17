@@ -28,6 +28,6 @@ def test_action_yml_is_valid():
 def test_workflows_are_valid():
     for wf in (ROOT / ".github" / "workflows").glob("*.yml"):
         doc = yaml.safe_load(wf.read_text(encoding="utf-8"))
-        assert "jobs" in doc and doc["jobs"], wf.name
+        assert doc.get("jobs"), wf.name
         for job in doc["jobs"].values():
             assert job["steps"], wf.name
