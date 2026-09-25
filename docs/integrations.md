@@ -5,7 +5,7 @@
 ```bash
 pipx install agent-assurance              # from PyPI
 pipx install "agent-assurance[mcp]"       # with the MCP server
-pipx install git+https://github.com/kunko-ai-labs/agent-assurance@v0.5.2   # or pinned to a release tag
+pipx install git+https://github.com/kunko-ai-labs/agent-assurance@v0.6.0   # or pinned to a release tag
 ```
 
 Releases ship a wheel and an sdist with Sigstore build provenance (`gh attestation verify agent_assurance-*.whl -R kunko-ai-labs/agent-assurance`).
@@ -20,7 +20,8 @@ agent-assurance scan path/to/repo -m promise.yaml --format sarif -o aa.sarif
 agent-assurance diff base-checkout head-checkout --fail-on-delta   # what did this change do?
 agent-assurance attest . -o aa-attestation.json          # evidence: what the config granted at this commit
 agent-assurance check all agent-assurance.yaml           # the promise alone: how much could it break?
-agent-assurance validate agent-assurance.yaml            # schema-check
+agent-assurance validate agent-assurance.yaml            # schema-check (manifest or policy, detected by apiVersion)
+agent-assurance validate --policy agent-assurance.policy.yaml   # policy: name, sha256, what it overrides
 ```
 
 Formats: `md` (PR comment / job summary), `json` (pipelines), `sarif` (GitHub code scanning; PASS is `kind: pass` so a clean agent never creates an alert; `diff` adds `baselineState`), `html` (the **capability card**).
